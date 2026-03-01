@@ -1,0 +1,16 @@
+[project]
+name = "auperator"
+version = "0.1.0"
+description = "智能运维Agent"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "docker>=7.1.0",
+    "langchain>=1.2.10",
+    "langchain-openai>=1.1.10",
+]
+
+[[tool.uv.index]]
+name = "tsinghua"
+url = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple"
+default = true
