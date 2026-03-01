@@ -489,6 +489,16 @@ class CustomTool(BaseTool):
 4. 推送到分支 (`git push origin feature/AmazingFeature`)
 5. 开启一个 Pull Request
 
+## 文档
+
+完整文档请参阅 [docs/](docs/README.md)：
+
+- [安装指南](docs/installation.md)
+- [快速开始](docs/quickstart.md)
+- [系统架构](docs/architecture.md)
+- [日志采集器](docs/collector/overview.md)
+- [部署指南](docs/deployment/deployment.md)
+
 ## 联系方式
 
 - 项目主页：https://github.com/thcpdd/auperator

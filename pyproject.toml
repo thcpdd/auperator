@@ -1,14 +1,21 @@
 [project]
 name = "auperator"
 version = "0.1.0"
-description = "智能运维Agent"
+description = "智能运维 Agent"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "docker>=7.1.0",
     "langchain>=1.2.10",
     "langchain-openai>=1.1.10",
+    "typer>=0.9.0",
+    "pydantic>=2.0.0",
+    "redis>=7.2.1",
 ]
+
+[project.scripts]
+auperator = "auperator.cli:main"
+auperator-collector = "auperator.collector.cli:main"
 
 [[tool.uv.index]]
 name = "tsinghua"
