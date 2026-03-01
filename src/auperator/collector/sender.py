@@ -9,6 +9,7 @@ from typing import Any
 
 import redis.asyncio as redis
 
+from auperator.config import settings
 from .models import LogEntry
 
 
@@ -25,23 +26,23 @@ class RedisSender:
 
     def __init__(
         self,
-        redis_url: str = "redis://localhost:6379",
-        stream_name: str = "logs:main",
-        max_retries: int = 3,
-        retry_delay: float = 1.0,
+        redis_url: str | None = None,
+        stream_name: str | None = None,
+        max_retries: int | None = None,
+        retry_delay: float | None = None,
     ):
         """初始化 Redis 发送器
 
         Args:
-            redis_url: Redis 连接 URL
-            stream_name: Stream 名称
-            max_retries: 最大重试次数
-            retry_delay: 重试延迟 (秒)
+            redis_url: Redis 连接 URL（默认从 settings 读取）
+            stream_name: Stream 名称（默认从 settings 读取）
+            max_retries: 最大重试次数（默认从 settings 读取）
+            retry_delay: 重试延迟 (秒)（默认从 settings 读取）
         """
-        self.redis_url = redis_url
-        self.stream_name = stream_name
-        self.max_retries = max_retries
-        self.retry_delay = retry_delay
+        self.redis_url = redis_url or settings.get_redis_url()
+        self.stream_name = stream_name or settings.redis.stream_name
+        self.max_retries = max_retries if max_retries is not None else settings.collector.max_retries
+        self.retry_delay = retry_delay if retry_delay is not None else settings.collector.retry_delay
 
         self._redis: redis.Redis | None = None
         self._connected = False

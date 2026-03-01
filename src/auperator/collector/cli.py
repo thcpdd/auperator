@@ -7,6 +7,7 @@ from typing import Annotated
 
 import typer
 
+from auperator.config import settings
 from .adapters import GenericAdapter, JsonAdapter
 from .collector import LogCollector
 from .consumer import RedisConsumer
@@ -46,11 +47,11 @@ def collect_docker(
     redis_url: Annotated[
         str,
         typer.Option("--redis", "-r", help="Redis 连接 URL"),
-    ] = "redis://localhost:6379",
+    ] = None,
     stream_name: Annotated[
         str,
         typer.Option("--stream", "-s", help="Stream 名称"),
-    ] = "logs:main",
+    ] = None,
     adapter: Annotated[
         str,
         typer.Option("--adapter", "-a", help="日志适配器类型 (json/generic)"),
@@ -62,17 +63,23 @@ def collect_docker(
     tail: Annotated[
         int,
         typer.Option("--tail", "-n", help="初始显示的行数 (0 表示全部)"),
-    ] = 100,
+    ] = None,
     service: Annotated[
         str | None,
-        typer.Option("--service", "-s", help="服务名称"),
+        typer.Option("--service", help="服务名称"),
     ] = None,
     environment: Annotated[
         str,
         typer.Option("--env", "-e", help="环境标识"),
-    ] = "unknown",
+    ] = None,
 ) -> None:
     """采集 Docker 日志并发送到 Redis"""
+    # 使用 settings 默认值
+    redis_url = redis_url or settings.get_redis_url()
+    stream_name = stream_name or settings.redis.stream_name
+    tail = tail if tail is not None else settings.docker.tail
+    environment = environment or settings.environment
+
     source = DockerSource(
         container_name=container,
         follow=follow,
@@ -128,25 +135,31 @@ def consume_logs(
     redis_url: Annotated[
         str,
         typer.Option("--redis", "-r", help="Redis 连接 URL"),
-    ] = "redis://localhost:6379",
+    ] = None,
     stream_name: Annotated[
         str,
         typer.Option("--stream", "-s", help="Stream 名称"),
-    ] = "logs:main",
+    ] = None,
     group_name: Annotated[
         str,
         typer.Option("--group", "-g", help="消费者组名称"),
-    ] = "auperator-group",
+    ] = None,
     consumer_name: Annotated[
         str,
         typer.Option("--name", "-n", help="消费者名称"),
-    ] = "agent-1",
+    ] = None,
     verbose: Annotated[
         bool,
         typer.Option("--verbose", "-v", help="详细输出模式"),
     ] = False,
 ) -> None:
     """从 Redis 消费日志"""
+    # 使用 settings 默认值
+    redis_url = redis_url or settings.get_redis_url()
+    stream_name = stream_name or settings.redis.stream_name
+    group_name = group_name or settings.redis.consumer_group
+    consumer_name = consumer_name or "agent-1"
+
     consumer = RedisConsumer(
         redis_url=redis_url,
         stream_name=stream_name,
@@ -210,14 +223,18 @@ def redis_info(
     redis_url: Annotated[
         str,
         typer.Option("--redis", "-r", help="Redis 连接 URL"),
-    ] = "redis://localhost:6379",
+    ] = None,
     stream_name: Annotated[
         str,
         typer.Option("--stream", "-s", help="Stream 名称"),
-    ] = "logs:main",
+    ] = None,
 ) -> None:
     """查看 Redis Stream 信息"""
     import redis.asyncio as redis
+
+    # 使用 settings 默认值
+    redis_url = redis_url or settings.get_redis_url()
+    stream_name = stream_name or settings.redis.stream_name
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)

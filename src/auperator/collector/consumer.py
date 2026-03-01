@@ -9,6 +9,7 @@ from typing import Any, Callable
 
 import redis.asyncio as redis
 
+from auperator.config import settings
 from .models import LogEntry
 
 
@@ -28,29 +29,29 @@ class RedisConsumer:
 
     def __init__(
         self,
-        redis_url: str = "redis://localhost:6379",
-        stream_name: str = "logs:main",
-        group_name: str = "auperator-group",
-        consumer_name: str = "agent-1",
-        batch_size: int = 100,
-        block_timeout: int = 5000,  # 毫秒
+        redis_url: str | None = None,
+        stream_name: str | None = None,
+        group_name: str | None = None,
+        consumer_name: str | None = None,
+        batch_size: int | None = None,
+        block_timeout: int | None = None,
     ):
         """初始化 Redis 消费者
 
         Args:
-            redis_url: Redis 连接 URL
-            stream_name: Stream 名称
-            group_name: 消费者组名称
+            redis_url: Redis 连接 URL（默认从 settings 读取）
+            stream_name: Stream 名称（默认从 settings 读取）
+            group_name: 消费者组名称（默认从 settings 读取）
             consumer_name: 消费者名称
-            batch_size: 每次读取的消息数
+            batch_size: 每次读取的消息数（默认从 settings 读取）
             block_timeout: 阻塞读取超时时间 (毫秒)
         """
-        self.redis_url = redis_url
-        self.stream_name = stream_name
-        self.group_name = group_name
-        self.consumer_name = consumer_name
-        self.batch_size = batch_size
-        self.block_timeout = block_timeout
+        self.redis_url = redis_url or settings.get_redis_url()
+        self.stream_name = stream_name or settings.redis.stream_name
+        self.group_name = group_name or settings.redis.consumer_group
+        self.consumer_name = consumer_name or "agent-1"
+        self.batch_size = batch_size if batch_size is not None else settings.collector.batch_size
+        self.block_timeout = block_timeout if block_timeout is not None else 5000
 
         self._redis: redis.Redis | None = None
         self._running = False

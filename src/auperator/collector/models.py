@@ -70,10 +70,10 @@ class LogEntry:
         """转换为字典格式"""
         return {
             "timestamp": self.timestamp,
-            "level": self.level.value,
+            "level": self.level.value if isinstance(self.level, LogLevel) else str(self.level),
             "message": self.message,
             "source": self.source,
-            "source_type": self.source_type.value if self.source_type else None,
+            "source_type": self.source_type.value if isinstance(self.source_type, LogSource) else self.source_type,
             "service": self.service,
             "environment": self.environment,
             "stack_trace": self.stack_trace,
@@ -112,4 +112,5 @@ class LogEntry:
     def __str__(self) -> str:
         """字符串表示"""
         ts = self.timestamp or self.collected_at
-        return f"[{ts}] [{self.level.value}] {self.message}"
+        level_str = self.level.value if isinstance(self.level, LogLevel) else str(self.level)
+        return f"[{ts}] [{level_str}] {self.message}"
