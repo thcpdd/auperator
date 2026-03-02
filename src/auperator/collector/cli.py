@@ -21,6 +21,36 @@ from .sources.docker_source import DockerSource
 app = typer.Typer(help="日志采集器 CLI")
 
 
+def run_async(coro):
+    """运行异步函数的辅助函数
+
+    Args:
+        coro: 异步协程对象
+
+    Raises:
+        SystemExit: 当发生异常时退出程序
+    """
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    try:
+        loop.run_until_complete(coro)
+    except KeyboardInterrupt:
+        print("\n操作已取消")
+        sys.exit(130)
+    except Exception as e:
+        print(f"错误：{e}", file=sys.stderr)
+        sys.exit(1)
+    finally:
+        # 清理未完成的任务
+        pending = asyncio.all_tasks(loop)
+        for task in pending:
+            task.cancel()
+        if pending:
+            loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+        loop.close()
+
+
 class ConsoleHandler:
     """控制台日志处理器"""
 
@@ -124,9 +154,6 @@ def collect_docker(
     sender = RedisSender(redis_url=redis_url, stream_name=stream_name)
     collector = LogCollector(source, log_adapter)
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
     async def run():
         await sender.connect()
         try:
@@ -139,13 +166,7 @@ def collect_docker(
             await sender.close()
             await source.stop()
 
-    try:
-        loop.run_until_complete(run())
-    except Exception as e:
-        print(f"错误：{e}", file=sys.stderr)
-        sys.exit(1)
-    finally:
-        loop.close()
+    run_async(run())
 
 
 @app.command("consume")
@@ -187,22 +208,21 @@ def consume_logs(
 
     handler = ConsoleHandler(verbose=verbose)
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
     async def on_error(e: Exception, entry: LogEntry | None):
         print(f"错误：{e}", file=sys.stderr)
 
-    try:
-        print(f"开始从 Redis Stream '{stream_name}' 消费日志...")
-        print(f"消费者组：{group_name}, 消费者：{consumer_name}")
-        print("按 Ctrl+C 停止\n")
-        loop.run_until_complete(consumer.consume(handler.handle, on_error=on_error))
-    except KeyboardInterrupt:
-        print("\n正在停止...")
-    finally:
-        loop.run_until_complete(consumer.close())
-        loop.close()
+    async def run():
+        try:
+            print(f"开始从 Redis Stream '{stream_name}' 消费日志...")
+            print(f"消费者组：{group_name}, 消费者：{consumer_name}")
+            print("按 Ctrl+C 停止\n")
+            await consumer.consume(handler.handle, on_error=on_error)
+        except KeyboardInterrupt:
+            print("\n正在停止...")
+        finally:
+            await consumer.close()
+
+    run_async(run())
 
 
 @app.command("list")
@@ -251,9 +271,6 @@ def redis_info(
     redis_url = redis_url or settings.get_redis_url()
     stream_name = stream_name or settings.redis.stream_name
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
     async def get_info():
         r = redis.from_url(redis_url, decode_responses=True)
         try:
@@ -268,47 +285,7 @@ def redis_info(
         finally:
             await r.close()
 
-    try:
-        loop.run_until_complete(get_info())
-    except Exception as e:
-        print(f"错误：{e}", file=sys.stderr)
-        sys.exit(1)
-    finally:
-        loop.close()
-
-
-@app.command("test")
-def test_adapter(
-    adapter: Annotated[
-        str,
-        typer.Option("--adapter", "-a", help="适配器类型 (json/generic)"),
-    ] = "json",
-) -> None:
-    """测试日志适配器"""
-    test_lines = [
-        '{"level": "INFO", "msg": "Server started", "time": "2024-01-01T00:00:00Z"}',
-        '{"level": "ERROR", "msg": "Database connection failed", "stack": "Error: ..."}',
-        '2024-01-01 12:00:00 INFO Application initialized',
-        '2024-01-01 12:00:01 ERROR Something went wrong',
-    ]
-
-    if adapter == "json":
-        log_adapter = JsonAdapter()
-    else:
-        log_adapter = GenericAdapter()
-
-    print(f"使用 {adapter} 适配器测试:\n")
-    print("-" * 60)
-
-    for line in test_lines:
-        print(f"\n原始：{line}")
-        try:
-            entry = log_adapter.parse(line)
-            print(f"解析：level={entry.level.value}, message={entry.message[:50]}...")
-        except Exception as e:
-            print(f"错误：{e}")
-
-    print("\n" + "-" * 60)
+    run_async(get_info())
 
 
 @app.command("show-position")
@@ -334,9 +311,6 @@ def show_position(
         source_type=source_type,
     )
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
     async def get_position():
         stats = await position_manager.get_stats(source_id)
         print(f"\n日志源类型：{stats['source_type']}")
@@ -358,13 +332,7 @@ def show_position(
 
         await position_manager.close()
 
-    try:
-        loop.run_until_complete(get_position())
-    except Exception as e:
-        print(f"错误：{e}", file=sys.stderr)
-        sys.exit(1)
-    finally:
-        loop.close()
+    run_async(get_position())
 
 
 @app.command("reset-position")
@@ -401,21 +369,12 @@ def reset_position(
         source_type=source_type,
     )
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
     async def do_reset():
         await position_manager.reset(source_id)
         print(f"已重置 '{source_type}:{source_id}' 的采集位置")
         await position_manager.close()
 
-    try:
-        loop.run_until_complete(do_reset())
-    except Exception as e:
-        print(f"错误：{e}", file=sys.stderr)
-        sys.exit(1)
-    finally:
-        loop.close()
+    run_async(do_reset())
 
 
 @app.command("cleanup-records")
@@ -445,21 +404,12 @@ def cleanup_records(
         source_type=source_type,
     )
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
     async def do_cleanup():
         deleted = await position_manager.cleanup_old_records(source_id, days)
         print(f"已清理 '{source_type}:{source_id}' 的 {deleted} 条过期记录")
         await position_manager.close()
 
-    try:
-        loop.run_until_complete(do_cleanup())
-    except Exception as e:
-        print(f"错误：{e}", file=sys.stderr)
-        sys.exit(1)
-    finally:
-        loop.close()
+    run_async(do_cleanup())
 
 
 def main():
