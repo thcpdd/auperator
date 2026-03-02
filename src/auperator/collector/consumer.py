@@ -47,7 +47,9 @@ class RedisConsumer:
             block_timeout: 阻塞读取超时时间 (毫秒)
         """
         self.redis_url = redis_url or settings.get_redis_url()
-        self.stream_name = stream_name or settings.redis.stream_name
+        # 添加 key 前缀
+        stream_name_raw = stream_name or settings.redis.stream_name
+        self.stream_name = settings.redis.add_prefix(stream_name_raw)
         self.group_name = group_name or settings.redis.consumer_group
         self.consumer_name = consumer_name or "agent-1"
         self.batch_size = batch_size if batch_size is not None else settings.collector.batch_size

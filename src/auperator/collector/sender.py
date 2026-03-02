@@ -40,7 +40,9 @@ class RedisSender:
             retry_delay: 重试延迟 (秒)（默认从 settings 读取）
         """
         self.redis_url = redis_url or settings.get_redis_url()
-        self.stream_name = stream_name or settings.redis.stream_name
+        # 添加 key 前缀
+        stream_name_raw = stream_name or settings.redis.stream_name
+        self.stream_name = settings.redis.add_prefix(stream_name_raw)
         self.max_retries = max_retries if max_retries is not None else settings.collector.max_retries
         self.retry_delay = retry_delay if retry_delay is not None else settings.collector.retry_delay
 

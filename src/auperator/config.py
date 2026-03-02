@@ -26,20 +26,35 @@ ENV_FILE = PROJECT_ROOT / ".env"
 
 class Redis:
     def __init__(
-        self, 
-        redis_host: str, 
-        redis_port: int, 
-        redis_password: str | None, 
-        redis_db: int, 
-        redis_stream_name: str, 
+        self,
+        redis_host: str,
+        redis_port: int,
+        redis_password: str | None,
+        redis_db: int,
+        redis_key_prefix: str,
+        redis_stream_name: str,
         redis_consumer_group: str
     ):
         self.host = redis_host
         self.port = redis_port
         self.password = redis_password
         self.db = redis_db
+        self.key_prefix = redis_key_prefix
         self.stream_name = redis_stream_name
         self.consumer_group = redis_consumer_group
+
+    def add_prefix(self, key: str) -> str:
+        """为 Redis key 添加前缀
+
+        Args:
+            key: 原始 key
+
+        Returns:
+            带前缀的 key
+        """
+        if self.key_prefix and not key.startswith(self.key_prefix):
+            return f"{self.key_prefix}{key}"
+        return key
 
     @property
     def url(self):
@@ -105,6 +120,7 @@ class Settings(BaseSettings):
     redis_port: int = Field(default=6379, alias="REDIS_PORT")
     redis_password: str | None = Field(default=None, alias="REDIS_PASSWORD")
     redis_db: int = Field(default=0, alias="REDIS_DB")
+    redis_key_prefix: str = Field(default="auperator:", alias="REDIS_KEY_PREFIX")
     redis_stream_name: str = Field(default="logs:main", alias="REDIS_STREAM_NAME")
     redis_consumer_group: str = Field(default="auperator-group", alias="REDIS_CONSUMER_GROUP")
 
@@ -141,11 +157,12 @@ class Settings(BaseSettings):
     @property
     def redis(self):
         return Redis(
-            self.redis_host, 
-            self.redis_port, 
-            self.redis_password, 
-            self.redis_db, 
-            self.redis_stream_name, 
+            self.redis_host,
+            self.redis_port,
+            self.redis_password,
+            self.redis_db,
+            self.redis_key_prefix,
+            self.redis_stream_name,
             self.redis_consumer_group
         )
 

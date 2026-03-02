@@ -94,6 +94,17 @@ class PositionManager:
         self._redis: redis.Redis | None = None
         self._connected = False
 
+    def _add_prefix(self, key: str) -> str:
+        """为 Redis key 添加前缀
+
+        Args:
+            key: 原始 key
+
+        Returns:
+            带前缀的 key
+        """
+        return settings.redis.add_prefix(key)
+
     def _get_position_key(self, source_id: str) -> str:
         """获取位置记录的 Redis 键
 
@@ -103,7 +114,8 @@ class PositionManager:
         Returns:
             Redis 键
         """
-        return f"{self.POSITION_PREFIX}{self.source_type}:{source_id}"
+        key = f"{self.POSITION_PREFIX}{self.source_type}:{source_id}"
+        return self._add_prefix(key)
 
     def _get_dedup_key(self, source_id: str, date: str | None = None) -> str:
         """获取去重集合的 Redis 键
@@ -117,7 +129,8 @@ class PositionManager:
         """
         if date is None:
             date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        return f"{self.DEDUP_PREFIX}{self.source_type}:{source_id}:{date}"
+        key = f"{self.DEDUP_PREFIX}{self.source_type}:{source_id}:{date}"
+        return self._add_prefix(key)
 
     async def _ensure_connected(self) -> None:
         """确保已连接 Redis"""

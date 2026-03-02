@@ -266,10 +266,11 @@ def redis_info(
     ] = None,
 ) -> None:
     """查看 Redis Stream 信息"""
-    
+
     # 使用 settings 默认值
     redis_url = redis_url or settings.get_redis_url()
-    stream_name = stream_name or settings.redis.stream_name
+    stream_name_raw = stream_name or settings.redis.stream_name
+    stream_name = settings.redis.add_prefix(stream_name_raw)
 
     async def get_info():
         r = redis.from_url(redis_url, decode_responses=True)
