@@ -1,7 +1,4 @@
-"""基于 Redis Streams 的日志发送器
-
-使用 Redis Streams 作为消息队列，实现采集器与 Agent 之间的解耦
-"""
+"""Redis 日志处理器"""
 
 import asyncio
 import json
@@ -10,7 +7,8 @@ from typing import Any
 import redis.asyncio as redis
 
 from auperator.config import settings
-from .models import LogEntry
+from auperator.collector.models import LogEntry
+from .base import BaseLogHandler
 
 
 class RedisSender:
@@ -24,13 +22,7 @@ class RedisSender:
         >>> await sender.send_batch([entry1, entry2])
     """
 
-    def __init__(
-        self,
-        redis_url: str | None = None,
-        stream_name: str | None = None,
-        max_retries: int | None = None,
-        retry_delay: float | None = None,
-    ):
+    def __init__(self):
         """初始化 Redis 发送器
 
         Args:
@@ -39,12 +31,12 @@ class RedisSender:
             max_retries: 最大重试次数（默认从 settings 读取）
             retry_delay: 重试延迟 (秒)（默认从 settings 读取）
         """
-        self.redis_url = redis_url or settings.get_redis_url()
+        self.redis_url = settings.get_redis_url()
         # 添加 key 前缀
-        stream_name_raw = stream_name or settings.redis.stream_name
+        stream_name_raw = settings.redis.stream_name
         self.stream_name = settings.redis.add_prefix(stream_name_raw)
-        self.max_retries = max_retries if max_retries is not None else settings.collector.max_retries
-        self.retry_delay = retry_delay if retry_delay is not None else settings.collector.retry_delay
+        self.max_retries = settings.collector.max_retries
+        self.retry_delay = settings.collector.retry_delay
 
         self._redis: redis.Redis | None = None
         self._connected = False
@@ -82,7 +74,7 @@ class RedisSender:
                 data = entry.to_dict()
                 message_id = await self._redis.xadd(
                     self.stream_name,
-                    {"data": json.dumps(data, ensure_ascii=False)},
+                    {"data": json.dumps(data, ensure_ascii=False)}
                 )
                 return message_id
             except redis.RedisError as e:
@@ -170,3 +162,26 @@ class RedisSender:
 
         count = await self._redis.xtrim(self.stream_name, 0)
         return count
+
+
+class RedisHandler(BaseLogHandler):
+    """Redis 日志处理器
+
+    将日志发送到 Redis Stream
+    """
+
+    def __init__(self):
+        """初始化 Redis 处理器
+
+        Args:
+            sender: Redis 发送器实例
+        """
+        self.sender = RedisSender()
+
+    async def handle(self, entry: LogEntry) -> None:
+        """发送日志到 Redis
+
+        Args:
+            entry: 日志条目
+        """
+        await self.sender.send(entry)

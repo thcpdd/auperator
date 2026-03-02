@@ -1,7 +1,6 @@
 """日志采集器命令行接口"""
 
 import asyncio
-import json
 import sys
 from typing import Annotated
 
@@ -13,9 +12,9 @@ from auperator.config import settings
 from .adapters import GenericAdapter, JsonAdapter
 from .collector import LogCollector
 from .consumer import RedisConsumer
+from .handlers import ConsoleHandler, RedisHandler
 from .models import LogEntry
 from .position_manager import PositionManager
-from .sender import RedisSender
 from .sources.docker_source import DockerSource
 
 app = typer.Typer(help="日志采集器 CLI")
@@ -51,39 +50,12 @@ def run_async(coro):
         loop.close()
 
 
-class ConsoleHandler:
-    """控制台日志处理器"""
-
-    def __init__(self, verbose: bool = False):
-        self.verbose = verbose
-
-    async def handle(self, entry: LogEntry) -> None:
-        """处理日志条目"""
-        if self.verbose:
-            print(json.dumps(entry.to_dict(), ensure_ascii=False, indent=2))
-        else:
-            level_color = {
-                "DEBUG": "\033[36m",
-                "INFO": "\033[32m",
-                "WARNING": "\033[33m",
-                "ERROR": "\033[31m",
-                "CRITICAL": "\033[35m",
-            }
-            color = level_color.get(entry.level.value, "\033[0m")
-            reset = "\033[0m"
-            print(f"{color}[{entry.level.value}]{reset} {entry.message}")
-
-
 @app.command("docker")
 def collect_docker(
     container: Annotated[str, typer.Argument(help="容器名称或 ID")],
     redis_url: Annotated[
         str,
         typer.Option("--redis", "-r", help="Redis 连接 URL"),
-    ] = None,
-    stream_name: Annotated[
-        str,
-        typer.Option("--stream", "-s", help="Stream 名称"),
     ] = None,
     adapter: Annotated[
         str,
@@ -113,7 +85,6 @@ def collect_docker(
     """采集 Docker 日志并发送到 Redis"""
     # 使用 settings 默认值
     redis_url = redis_url or settings.get_redis_url()
-    stream_name = stream_name or settings.redis.stream_name
     tail = tail if tail is not None else settings.docker.tail
     environment = environment or settings.environment
     deduplication_enabled = settings.deduplication.enabled and not no_dedup
@@ -151,20 +122,13 @@ def collect_docker(
             environment=environment,
         )
 
-    sender = RedisSender(redis_url=redis_url, stream_name=stream_name)
-    collector = LogCollector(source, log_adapter)
+    collector = LogCollector(source, log_adapter, RedisHandler())
 
     async def run():
-        await sender.connect()
         try:
-            async for raw_line in source.read():
-                entry = log_adapter.parse(raw_line)
-                await sender.send(entry)
+            await collector.collect()
         except KeyboardInterrupt:
             print("\n正在停止...")
-        finally:
-            await sender.close()
-            await source.stop()
 
     run_async(run())
 

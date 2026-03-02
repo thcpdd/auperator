@@ -1,10 +1,10 @@
 """日志采集器模块"""
 
 from .adapters import BaseLogAdapter, GenericAdapter, JsonAdapter
-from .collector import CollectorStatus, LogCollector, LogCollectorManager, LogHandler
+from .collector import CollectorStatus, LogCollector
 from .consumer import RedisConsumer
+from .handlers import ConsoleHandler, RedisHandler
 from .models import LogEntry, LogLevel, LogSource
-from .sender import RedisSender
 from .sources.docker_source import DockerSource
 from .sources.base import BaseLogSource
 
@@ -19,12 +19,12 @@ __all__ = [
     # 采集器
     "LogCollector",
     "LogCollectorManager",
-    "LogHandler",
     "CollectorStatus",
-    # 发送器
-    "RedisSender",
     # 消费者
     "RedisConsumer",
+    # 日志处理器
+    "ConsoleHandler",
+    "RedisHandler",
     # 日志源
     "DockerSource",
     # 适配器
