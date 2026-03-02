@@ -64,14 +64,26 @@ class Collector:
 
 class Docker:
     def __init__(
-        self, 
-        docker_socket: str, 
-        docker_tail: int, 
+        self,
+        docker_socket: str,
+        docker_tail: int,
         docker_follow: bool
     ):
         self.socket = docker_socket
         self.tail = docker_tail
         self.follow = docker_follow
+
+
+class Deduplication:
+    def __init__(
+        self,
+        enabled: bool,
+        window: int,
+        ttl: int,
+    ):
+        self.enabled = enabled
+        self.window = window
+        self.ttl = ttl
 
 
 class Settings(BaseSettings):
@@ -106,6 +118,11 @@ class Settings(BaseSettings):
     docker_socket: str = Field(default="/var/run/docker.sock", alias="DOCKER_SOCKET")
     docker_tail: int = Field(default=100, alias="DOCKER_TAIL")
     docker_follow: bool = Field(default=True, alias="DOCKER_FOLLOW")
+
+    # 去重配置
+    deduplication_enabled: bool = Field(default=True, alias="DEDUPLICATION_ENABLED")
+    deduplication_window: int = Field(default=86400, alias="DEDUPLICATION_WINDOW")  # 24小时
+    deduplication_ttl: int = Field(default=604800, alias="DEDUPLICATION_TTL")  # 7天
 
     # 通用配置
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
@@ -144,6 +161,14 @@ class Settings(BaseSettings):
     @property
     def docker(self):
         return Docker(self.docker_socket, self.docker_tail, self.docker_follow)
+
+    @property
+    def deduplication(self):
+        return Deduplication(
+            self.deduplication_enabled,
+            self.deduplication_window,
+            self.deduplication_ttl,
+        )
 
     def get_redis_url(self) -> str:
         return self.redis.url

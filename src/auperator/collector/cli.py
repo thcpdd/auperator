@@ -5,13 +5,16 @@ import json
 import sys
 from typing import Annotated
 
+import docker
 import typer
+import redis.asyncio as redis
 
 from auperator.config import settings
 from .adapters import GenericAdapter, JsonAdapter
 from .collector import LogCollector
 from .consumer import RedisConsumer
 from .models import LogEntry
+from .position_manager import PositionManager
 from .sender import RedisSender
 from .sources.docker_source import DockerSource
 
@@ -72,6 +75,10 @@ def collect_docker(
         str,
         typer.Option("--env", "-e", help="环境标识"),
     ] = None,
+    no_dedup: Annotated[
+        bool,
+        typer.Option("--no-dedup", help="禁用去重功能"),
+    ] = False,
 ) -> None:
     """采集 Docker 日志并发送到 Redis"""
     # 使用 settings 默认值
@@ -79,6 +86,15 @@ def collect_docker(
     stream_name = stream_name or settings.redis.stream_name
     tail = tail if tail is not None else settings.docker.tail
     environment = environment or settings.environment
+    deduplication_enabled = settings.deduplication.enabled and not no_dedup
+
+    # 创建位置管理器
+    position_manager = None
+    if deduplication_enabled:
+        position_manager = PositionManager(
+            redis_url=redis_url,
+            deduplication_enabled=deduplication_enabled,
+        )
 
     source = DockerSource(
         container_name=container,
@@ -86,6 +102,8 @@ def collect_docker(
         tail=tail,
         service=service,
         environment=environment,
+        position_manager=position_manager,
+        deduplication_enabled=deduplication_enabled,
     )
 
     if adapter == "json":
@@ -196,8 +214,6 @@ def list_containers(
 ) -> None:
     """列出可用的 Docker 容器"""
     try:
-        import docker
-
         client = docker.from_env()
         containers = client.containers.list(all=all)
 
@@ -230,8 +246,7 @@ def redis_info(
     ] = None,
 ) -> None:
     """查看 Redis Stream 信息"""
-    import redis.asyncio as redis
-
+    
     # 使用 settings 默认值
     redis_url = redis_url or settings.get_redis_url()
     stream_name = stream_name or settings.redis.stream_name
@@ -294,6 +309,157 @@ def test_adapter(
             print(f"错误：{e}")
 
     print("\n" + "-" * 60)
+
+
+@app.command("show-position")
+def show_position(
+    source_id: Annotated[
+        str,
+        typer.Argument(help="日志源标识（容器名、文件路径等）"),
+    ],
+    source_type: Annotated[
+        str,
+        typer.Option("--type", "-t", help="日志源类型 (docker/file/kubernetes)"),
+    ] = "docker",
+    redis_url: Annotated[
+        str,
+        typer.Option("--redis", "-r", help="Redis 连接 URL"),
+    ] = None,
+) -> None:
+    """显示日志源的采集位置"""
+    redis_url = redis_url or settings.get_redis_url()
+
+    position_manager = PositionManager(
+        redis_url=redis_url,
+        source_type=source_type,
+    )
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    async def get_position():
+        stats = await position_manager.get_stats(source_id)
+        print(f"\n日志源类型：{stats['source_type']}")
+        print(f"日志源标识：{stats['source_id']}")
+        print("-" * 60)
+
+        if stats["position"]:
+            pos = stats["position"]
+            print(f"最后时间戳：{pos['last_docker_ts']}")
+            print(f"Unix 时间戳：{pos['last_timestamp']}")
+            print(f"最后采集时间：{pos['last_collected_at']}")
+            print(f"最后日志哈希：{pos['last_hash'][:16]}...")
+        else:
+            print("未找到位置记录（可能从未采集过）")
+
+        print("-" * 60)
+        print(f"去重集合数：{stats['dedup_sets']}")
+        print(f"总去重记录数：{stats['total_hashes']}")
+
+        await position_manager.close()
+
+    try:
+        loop.run_until_complete(get_position())
+    except Exception as e:
+        print(f"错误：{e}", file=sys.stderr)
+        sys.exit(1)
+    finally:
+        loop.close()
+
+
+@app.command("reset-position")
+def reset_position(
+    source_id: Annotated[
+        str,
+        typer.Argument(help="日志源标识（容器名、文件路径等）"),
+    ],
+    source_type: Annotated[
+        str,
+        typer.Option("--type", "-t", help="日志源类型 (docker/file/kubernetes)"),
+    ] = "docker",
+    redis_url: Annotated[
+        str,
+        typer.Option("--redis", "-r", help="Redis 连接 URL"),
+    ] = None,
+    confirm: Annotated[
+        bool,
+        typer.Option("--confirm", "-y", help="确认重置"),
+    ] = False,
+) -> None:
+    """重置日志源的采集位置（下次启动将从头开始采集）"""
+    if not confirm:
+        typer.confirm(
+            f"确定要重置 '{source_type}:{source_id}' 的采集位置吗？\n"
+            "这将导致下次采集时重新读取所有日志。",
+            abort=True,
+        )
+
+    redis_url = redis_url or settings.get_redis_url()
+
+    position_manager = PositionManager(
+        redis_url=redis_url,
+        source_type=source_type,
+    )
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    async def do_reset():
+        await position_manager.reset(source_id)
+        print(f"已重置 '{source_type}:{source_id}' 的采集位置")
+        await position_manager.close()
+
+    try:
+        loop.run_until_complete(do_reset())
+    except Exception as e:
+        print(f"错误：{e}", file=sys.stderr)
+        sys.exit(1)
+    finally:
+        loop.close()
+
+
+@app.command("cleanup-records")
+def cleanup_records(
+    source_id: Annotated[
+        str,
+        typer.Argument(help="日志源标识（容器名、文件路径等）"),
+    ],
+    source_type: Annotated[
+        str,
+        typer.Option("--type", "-t", help="日志源类型 (docker/file/kubernetes)"),
+    ] = "docker",
+    days: Annotated[
+        int,
+        typer.Option("--days", "-d", help="保留天数"),
+    ] = 7,
+    redis_url: Annotated[
+        str,
+        typer.Option("--redis", "-r", help="Redis 连接 URL"),
+    ] = None,
+) -> None:
+    """清理旧的去重记录"""
+    redis_url = redis_url or settings.get_redis_url()
+
+    position_manager = PositionManager(
+        redis_url=redis_url,
+        source_type=source_type,
+    )
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    async def do_cleanup():
+        deleted = await position_manager.cleanup_old_records(source_id, days)
+        print(f"已清理 '{source_type}:{source_id}' 的 {deleted} 条过期记录")
+        await position_manager.close()
+
+    try:
+        loop.run_until_complete(do_cleanup())
+    except Exception as e:
+        print(f"错误：{e}", file=sys.stderr)
+        sys.exit(1)
+    finally:
+        loop.close()
 
 
 def main():

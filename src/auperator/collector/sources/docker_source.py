@@ -1,12 +1,14 @@
 """Docker 容器日志源"""
 
 import asyncio
+import hashlib
 from typing import AsyncIterator
 
 import docker
 from docker import DockerClient
 from docker.models.containers import Container
 
+from auperator.collector.position_manager import PositionManager
 from .base import BaseLogSource
 
 
@@ -34,6 +36,8 @@ class DockerSource(BaseLogSource):
         timestamps: bool = False,
         service: str | None = None,
         environment: str = "unknown",
+        position_manager: PositionManager | None = None,
+        deduplication_enabled: bool = True,
     ):
         """初始化 Docker 日志源
 
@@ -46,15 +50,20 @@ class DockerSource(BaseLogSource):
             timestamps: 是否在日志中包含时间戳
             service: 服务名称 (可选，用于标识)
             environment: 环境标识
+            position_manager: 位置管理器（用于断点续传）
+            deduplication_enabled: 是否启用去重
         """
         self.container_name = container_name
         self.follow = follow
         self.tail = tail
         self.since = since
         self.until = until
-        self.timestamps = timestamps
+        # 强制启用时间戳以支持断点续传
+        self.timestamps = True if position_manager else timestamps
         self._service = service
         self._environment = environment
+        self._position_manager = position_manager
+        self._deduplication_enabled = deduplication_enabled
 
         # Docker 客户端和容器引用
         self._client: DockerClient | None = None
@@ -112,6 +121,19 @@ class DockerSource(BaseLogSource):
         if not self._container:
             await self.start()
 
+        # 获取上次采集位置
+        since_ts = None
+        if self._position_manager and self._deduplication_enabled:
+            try:
+                position = await self._position_manager.get_last_position(
+                    self.container_name
+                )
+                if position and position.last_timestamp > 0:
+                    since_ts = position.last_timestamp
+            except Exception as e:
+                # 获取位置失败，继续使用默认行为
+                print(f"警告：获取容器 {self.container_name} 位置失败：{e}")
+
         while self._running:
             try:
                 # 获取日志流
@@ -119,7 +141,7 @@ class DockerSource(BaseLogSource):
                     stream=self.follow,
                     follow=self.follow,
                     tail=self.tail if self.tail > 0 else "all",
-                    since=self.since,
+                    since=since_ts or self.since,  # 优先使用位置记录的时间戳
                     until=self.until,
                     timestamps=self.timestamps,
                 )
@@ -129,12 +151,69 @@ class DockerSource(BaseLogSource):
                     for log_line in self._log_stream:
                         if not self._running:
                             break
+
                         # 解码字节为字符串
-                        yield log_line.decode("utf-8", errors="replace")
+                        line = log_line.decode("utf-8", errors="replace")
+
+                        # 如果启用了去重，进行去重处理
+                        if self._position_manager and self._deduplication_enabled:
+                            docker_ts, content = self._parse_docker_log(line)
+                            if not content:
+                                # 解析失败，直接返回原始行
+                                yield line
+                                continue
+
+                            # 计算哈希并检查是否重复
+                            log_hash = self._position_manager.calculate_hash(
+                                content, docker_ts
+                            )
+
+                            try:
+                                is_duplicate = await self._position_manager.is_duplicate(
+                                    self.container_name, log_hash
+                                )
+                                if is_duplicate:
+                                    # 跳过重复日志
+                                    continue
+
+                                # 标记为已处理
+                                await self._position_manager.mark_processed(
+                                    self.container_name, log_hash, docker_ts
+                                )
+                            except Exception as e:
+                                # 去重失败，记录警告但继续处理
+                                print(f"警告：去重检查失败：{e}")
+
+                            yield content
+                        else:
+                            yield line
                 else:
                     # 非流式模式，读取完成后返回
                     for log_line in self._log_stream:
-                        yield log_line.decode("utf-8", errors="replace")
+                        line = log_line.decode("utf-8", errors="replace")
+                        if self._position_manager and self._deduplication_enabled:
+                            docker_ts, content = self._parse_docker_log(line)
+                            if content:
+                                log_hash = self._position_manager.calculate_hash(
+                                    content, docker_ts
+                                )
+                                try:
+                                    is_duplicate = (
+                                        await self._position_manager.is_duplicate(
+                                            self.container_name, log_hash
+                                        )
+                                    )
+                                    if not is_duplicate:
+                                        await self._position_manager.mark_processed(
+                                            self.container_name, log_hash, docker_ts
+                                        )
+                                        yield content
+                                except Exception:
+                                    yield line
+                            else:
+                                yield line
+                        else:
+                            yield line
                     break
 
             except docker.errors.NotFound:
@@ -146,6 +225,22 @@ class DockerSource(BaseLogSource):
                     await asyncio.sleep(5)
                 else:
                     break
+
+    def _parse_docker_log(self, line: str) -> tuple[str, str]:
+        """解析 Docker 日志，返回 (时间戳, 内容)
+
+        Args:
+            line: Docker 日志行（包含时间戳）
+
+        Returns:
+            (时间戳, 内容) 元组
+        """
+        # Docker timestamps=True 时格式: "2024-03-02T10:30:00.123456789Z log content"
+        if " " in line:
+            parts = line.split(" ", 1)
+            if len(parts) == 2:
+                return parts[0], parts[1]
+        return "", line
 
     async def collect_all(self) -> list[str]:
         """一次性收集所有当前日志
