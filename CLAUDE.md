@@ -4,109 +4,105 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Auperator is an intelligent operations system based on the DeepAgents architecture. It automatically monitors web applications, collects logs, intelligently analyzes and fixes issues, and completes the closed-loop fix by submitting PRs.
+Auperator (Automation Operator) is an intelligent AIOps Agent that automatically monitors web applications, collects logs, performs intelligent analysis, and fixes issues through PR submission.
 
-## Development Commands
+## Build & Development Commands
 
-### Environment Setup
 ```bash
-# Install dependencies (uses uv package manager)
-uv sync
-
-# Install the package in development mode
+# Install dependencies and package
 uv pip install -e .
-```
 
-### Running the Application
-```bash
-# Start log collector for Docker container
-auperator-collector docker <container_name> -f
+# Run the main CLI
+auperator --help
+
+# Run the collector CLI
+auperator-collector --help
+
+# Collect Docker logs
+auperator-collector docker <container> -n 100
 
 # Consume logs from Redis
 auperator-collector consume -v
 
-# List available Docker containers
+# List available containers
 auperator-collector list
 
-# View Redis Stream information
+# View Redis Stream info
 auperator-collector redis-info
 
-# Test log adapters
-auperator-collector test -a json
-```
-
-### Building
-```bash
-# Build the package
-uv build
-
-# Install from built wheel
-uv pip install dist/auperator-*.whl
+# Show/reset position for a log source
+auperator-collector show-position <source-id>
+auperator-collector reset-position <source-id> --confirm
 ```
 
 ## Architecture
 
+### High-Level Design
+
+The system uses a message-queue-based decoupled architecture:
+
+```
+┌──────────────┐    ┌──────────────┐    ┌──────────────────┐
+│  Log Source  │───▶│   Collector  │───▶│  Redis Streams   │
+│  (Docker)    │    │  (Source+Adapter) │  (logs:main)      │
+└──────────────┘    └──────────────┘    └──────────────────┘
+                                                   │
+                                                   ▼
+                                          ┌──────────────────┐
+                                          │    Consumer      │
+                                          │  (Agent reads)   │
+                                          └──────────────────┘
+```
+
 ### Core Components
 
-```
-Source (read logs) ──▶ Adapter (parse logs) ──▶ Sender (send to Redis) ──▶ Redis Streams
-```
+**Log Collector (`src/auperator/collector/`)**:
+- **Sources** (`sources/`): Read raw logs from specific sources (Docker, File, Kubernetes)
+- **Adapters** (`adapters/`): Parse raw logs into standardized `LogEntry` format
+  - `JsonAdapter`: For JSON-structured logs
+  - `GenericAdapter`: For unstructured logs with heuristic parsing
+- **Handlers** (`handlers/`): Process parsed logs (Console, Redis)
+- **Consumer** (`consumer.py`): Redis Streams consumer for Agent to read logs
+- **Position Manager** (`position_manager.py`): Tracks collection progress and handles deduplication
 
-1. **Log Collector** ([src/auperator/collector/](src/auperator/collector/))
-   - **Sources**: Read raw logs from specific origins (Docker, File, Kubernetes)
-   - **Adapters**: Parse raw logs into standardized `LogEntry` format
-   - **Sender**: Send logs to Redis Streams
-   - **Consumer**: Consume logs from Redis for Agent processing
+**Configuration (`src/auperator/config.py`)**:
+- Uses `pydantic-settings` to load config from `.env` file
+- Key settings: Redis connection, collector batch size, Docker options, deduplication window/TTL
 
-2. **Message Queue** (Redis Streams)
-   - Decouples collector and Agent
-   - Supports multiple consumers via consumer groups
-   - Provides persistence and replay capability
+**CLI (`src/auperator/cli.py`, `src/auperator/collector/cli.py`)**:
+- Built with `typer`
+- Main commands: `auperator` (main CLI), `auperator-collector` (collector subcommands)
 
-3. **DeepAgents Agent** ([src/auperator/deepagents/](src/auperator/deepagents/))
-   - Analyzes logs for bug detection
-   - Performs root cause analysis
-   - Generates fixes and submits PRs
+### Data Flow
 
-### Design Patterns
+1. **Source** reads raw log lines via `read()` async iterator
+2. **Adapter** parses each line into `LogEntry` via `parse()`
+3. **Handler** processes the entry (e.g., sends to Redis)
+4. **Consumer** reads from Redis Stream using consumer groups
+5. Agent processes logs and takes action
 
-- **Adapter Pattern**: Extensible log parsing via `BaseLogAdapter`
-- **Source Pattern**: Extensible log collection via `BaseLogSource`
-- **Async/Await**: All I/O operations are asynchronous
+### Key Design Patterns
+
+- **Adapter Pattern**: Easy to extend for new log formats by inheriting `BaseLogAdapter`
+- **Strategy Pattern**: Different sources implement `BaseLogSource` interface
+- **Consumer Groups**: Redis Streams consumer groups for load balancing and reliability
+
+## Redis Key Prefix
+
+All Redis keys are prefixed with `auperator:` (configurable via `REDIS_KEY_PREFIX`). Use `settings.redis.add_prefix(key)` to add prefix.
+
+## Extending the System
+
+**Add a new log source**: Inherit `BaseLogSource` and implement `read()`, `start()`, `stop()`, `name`
+
+**Add a new adapter**: Inherit `BaseLogAdapter` and implement `parse(raw_line) -> LogEntry`
+
+**Add a new handler**: Inherit `BaseLogHandler` and implement `handle(entry)`
 
 ## Configuration
 
-Configuration is managed through `pydantic-settings` and loaded from `.env` file. See [`.env.example`](.env.example) for all available options.
-
-Key configuration files:
-- [src/auperator/config.py](src/auperator/config.py) - Settings class with validation
-- `.env` - Environment-specific configuration (not in git)
-
-## Adding New Features
-
-### Adding a New Log Source
-
-1. Inherit from `BaseLogSource` in [src/auperator/collector/sources/base.py](src/auperator/collector/sources/base.py)
-2. Implement `read()`, `start()`, `stop()`, and `name` property
-3. Return an async iterator of raw log lines
-
-### Adding a New Log Adapter
-
-1. Inherit from `BaseLogAdapter` in [src/auperator/collector/adapters/base.py](src/auperator/collector/adapters/base.py)
-2. Implement `parse()` to return a `LogEntry`
-3. The adapter should handle various log formats and extract structured data
-
-## Code Conventions
-
-- Use async/await for all I/O operations
-- Type hints are required (Python 3.11+)
-- Use `pydantic` for data validation and models
-- CLI commands use `typer` for argument parsing
-- Configuration uses `pydantic-settings`
-
-## Project Structure Notes
-
-- No tests directory yet - tests should be added in a `tests/` directory
-- Documentation is in [docs/](docs/) - architecture, implementation guides
-- The main CLI entry point is `auperator` command
-- The collector CLI is `auperator-collector` command
+Configuration is loaded from `.env` file. See `.env` for all available options including:
+- Redis settings (`REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`, `REDIS_DB`, `REDIS_KEY_PREFIX`)
+- Collector settings (`COLLECTOR_BATCH_SIZE`, `COLLECTOR_BATCH_TIMEOUT`)
+- Docker settings (`DOCKER_TAIL`, `DOCKER_FOLLOW`)
+- Deduplication settings (`DEDUPLICATION_ENABLED`, `DEDUPLICATION_WINDOW`, `DEDUPLICATION_TTL`)
