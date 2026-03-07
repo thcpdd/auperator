@@ -2,76 +2,71 @@
 
 ## 快速开始
 
-- [安装指南](installation.md) - 安装和配置 Auperator
-- [快速开始](quickstart.md) - 快速上手使用
+- [README](../README.md) - 项目概述和快速开始
+- [.env.example](../.env.example) - 环境变量配置示例
 
-## 架构设计
+## 核心文档
 
-- [系统架构](architecture.md) - 整体架构设计
-- [日志采集器架构](collector/architecture.md) - 日志采集器设计
+- [CLAUDE.md](../CLAUDE.md) - Claude Code 开发指南
+- [vector.yaml](../vector.yaml) - Vector 配置文件
+
+## 架构
+
+Auperator 使用 **Vector.dev** 进行日志采集和处理：
+
+```
+Log Source → Vector → Redis List → Consumer → Agent
+```
+
+### 核心组件
+
+1. **Vector** - 日志采集、多行聚合、错误过滤
+2. **Redis** - 消息队列（List 类型）
+3. **Auperator Consumer** - 日志消费和格式转换
+4. **Agent** - 智能分析和自动修复
 
 ## 使用指南
 
-### 日志采集器
+### CLI 命令
 
-- [采集器概述](collector/overview.md) - 功能概览
-- [配置指南](collector/configuration.md) - 配置采集器
-- [CLI 参考](collector/cli-reference.md) - 命令行接口
+```bash
+# 消费日志
+auperator-collector consume -v
 
-### 组件文档
+# 查看 List 信息
+auperator-collector list-info
+```
 
-- [Docker 日志源](collector/docker-source.md) - Docker 容器日志采集
-- [日志适配器](collector/adapters.md) - 日志格式解析
-- [Redis 消息队列](collector/redis-mq.md) - 基于 Redis Streams 的消息队列
+### 配置文件
 
-## API 参考
-
-- [Python API](api/python.md) - Python 模块 API
-- [REST API](api/rest.md) - RESTful API (待实现)
+- `.env` - 环境变量配置
+- `vector.yaml` - Vector 日志处理配置
 
 ## 开发指南
 
-- [扩展日志源](development/extending-sources.md) - 自定义日志源
-- [扩展适配器](development/extending-adapters.md) - 自定义日志适配器
-- [贡献指南](development/contributing.md) - 代码贡献
+### 扩展组件
 
-## 运维指南
+- **自定义适配器**：继承 `BaseLogAdapter`
+- **自定义处理器**：继承 `BaseLogHandler`
 
-- [部署指南](deployment/deployment.md) - 生产环境部署
-- [监控与告警](deployment/monitoring.md) - 监控配置
-- [故障排查](deployment/troubleshooting.md) - 常见问题
+### 项目结构
+
+```
+src/auperator/
+├── cli.py                    # 主命令行接口
+├── config.py                 # 配置管理
+└── collector/
+    ├── cli.py                # 采集器 CLI
+    ├── models.py             # 数据模型
+    ├── adapters/             # 日志适配器
+    ├── handlers/             # 日志处理器
+    ├── sources/              # 日志源（保留用于扩展）
+    └── vector_consumer.py    # Vector Redis 消费者
+```
 
 ---
 
-## 文档目录结构
+## 项目链接
 
-```
-docs/
-├── index.md                    # 本文档索引
-├── installation.md             # 安装指南
-├── quickstart.md               # 快速开始
-├── architecture.md             # 系统架构
-│
-├── collector/                  # 日志采集器文档
-│   ├── overview.md             # 概述
-│   ├── architecture.md         # 架构设计
-│   ├── configuration.md        # 配置指南
-│   ├── cli-reference.md        # CLI 参考
-│   ├── docker-source.md        # Docker 日志源
-│   ├── adapters.md             # 日志适配器
-│   └── redis-mq.md             # Redis 消息队列
-│
-├── api/                        # API 文档
-│   ├── python.md               # Python API
-│   └── rest.md                 # REST API
-│
-├── development/                # 开发指南
-│   ├── extending-sources.md    # 扩展日志源
-│   ├── extending-adapters.md   # 扩展适配器
-│   └── contributing.md         # 贡献指南
-│
-└── deployment/                 # 运维指南
-    ├── deployment.md           # 部署指南
-    ├── monitoring.md           # 监控与告警
-    └── troubleshooting.md      # 故障排查
-```
+- [GitHub 仓库](https://github.com/thcpdd/auperator)
+- [问题反馈](https://github.com/thcpdd/auperator/issues)

@@ -4,41 +4,48 @@
 
 ## 文档导航
 
-### 快速开始
+### 核心文档
 
-- [安装指南](installation.md) - 安装和配置
-- [快速开始](quickstart.md) - 快速上手
+- [README](../README.md) - 项目概述和快速开始
+- [CLAUDE.md](../CLAUDE.md) - Claude Code 开发指南
 
-### 了解 Auperator
+### 配置文件
 
-- [系统架构](architecture.md) - 整体架构设计
+- [.env.example](../.env.example) - 环境变量配置示例
+- [vector.yaml](../vector.yaml) - Vector 日志处理配置
 
-### 日志采集器
+## 项目概述
 
-- [采集器概述](collector/overview.md) - 功能概览
-- [架构设计](collector/architecture.md) - 详细设计
-- [配置指南](collector/configuration.md) - 配置说明
-- [CLI 参考](collector/cli-reference.md) - 命令行手册
-- [Docker 日志源](collector/docker-source.md) - Docker 采集
-- [日志适配器](collector/adapters.md) - 适配器详解
-- [Redis 消息队列](collector/redis-mq.md) - Redis Streams
+Auperator 使用 **Vector.dev** 进行日志采集和处理，通过 Redis List 进行消息传递。
 
-### 开发指南
+### 架构
 
-- [扩展日志源](development/extending-sources.md) - 自定义日志源
-- [扩展适配器](development/extending-adapters.md) - 自定义适配器
+```
+Log Source → Vector → Redis List → Consumer → Agent
+```
 
-### 运维指南
+### 核心组件
 
-- [部署指南](deployment/deployment.md) - 生产部署
-- [监控与告警](deployment/monitoring.md) - 监控配置
-- [故障排查](deployment/troubleshooting.md) - 常见问题
+1. **Vector** - 日志采集、多行聚合、错误过滤
+2. **Redis** - 消息队列（List 类型）
+3. **Auperator Consumer** - 日志消费和格式转换
+4. **Agent** - 智能分析和自动修复
 
-### 实现细节
+## 快速开始
 
-- [实现总结](implementation.md) - 实现状态和细节
+```bash
+# 1. 安装依赖
+pip install -e .
 
----
+# 2. 配置环境变量
+cp .env.example .env
+
+# 3. 启动 Vector
+vector --config vector.yaml
+
+# 4. 消费日志
+auperator-collector consume -v
+```
 
 ## 项目链接
 
