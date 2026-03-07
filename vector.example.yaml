@@ -1,0 +1,62 @@
+sources:
+  python_app_logs:
+    type: "docker_logs"
+    include_containers: ["6a0964310ac3"] # 建议生产环境换成名称或 label
+
+transforms:
+  # 1. 鲁棒的合并逻辑：将多行堆栈聚合成一个事件
+  merged_logs:
+    type: "reduce"
+    inputs: ["python_app_logs"]
+    group_by: ["container_id"]
+    merge_strategies:
+      message: "concat"
+    # 万能正则：匹配日期、方括号、或者常见的日志级别
+    # 只要不符合这个开头的行，都会被认为是上一行的延续（比如堆栈缩进部分）
+    starts_when: |
+      msg = to_string(.message) ?? ""
+      match(msg, r'^(\d{4}|\[|\d{2}:\d{2}|INFO|DEBUG|WARN|ERROR|CRITICAL)')
+    expire_after_ms: 1000
+
+  # 2. 万能过滤逻辑：关键词+模式匹配
+  error_only_filter:
+    type: "filter"
+    inputs: ["merged_logs"]
+    condition: |
+      # 1. 安全转换并转为小写
+      msg = downcase(to_string(.message) ?? "")
+      
+      # 2. 使用 contains 检查字符串是否包含特定子串
+      # contains(string, search_for)
+      contains(msg, "error") || 
+      contains(msg, "exception") || 
+      contains(msg, "traceback") ||
+      contains(msg, "critical") ||
+      contains(msg, "fatal") ||
+      # 3. 配合正则捕获 5xx 错误
+      match(msg, r' (5\d{2}) ')
+
+sinks:
+  # Redis sink - 发送到 Auperator Redis List
+  redis_output:
+    type: "redis"
+    inputs: ["error_only_filter"]
+    endpoint: "redis://localhost:6379"
+    key: "auperator:logs:main"
+    # 使用 Vector 的数据字段
+    encoding: 
+      codec: "json"
+    # 请求配置（远程 Redis 需要更长的超时）
+    request:
+      timeout_secs: 60
+    # 批量发送配置（减小批量大小以降低单次请求时间）
+    batch:
+      max_events: 1
+      timeout_secs: 10
+
+  # 保留控制台输出用于调试
+  console_output:
+    type: "console"
+    inputs: ["error_only_filter"]
+    encoding:
+      codec: "json"

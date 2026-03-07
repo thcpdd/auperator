@@ -1,7 +1,6 @@
 """日志适配器模块"""
 
 from .base import BaseLogAdapter
-from .generic_adapter import GenericAdapter
-from .json_adapter import JsonAdapter
+from .vector_adapter import VectorAdapter
 
-__all__ = ["BaseLogAdapter", "JsonAdapter", "GenericAdapter"]
+__all__ = ["BaseLogAdapter", "VectorAdapter"]

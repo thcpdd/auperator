@@ -32,16 +32,14 @@ class Redis:
         redis_password: str | None,
         redis_db: int,
         redis_key_prefix: str,
-        redis_stream_name: str,
-        redis_consumer_group: str
+        redis_list_name: str,
     ):
         self.host = redis_host
         self.port = redis_port
         self.password = redis_password
         self.db = redis_db
         self.key_prefix = redis_key_prefix
-        self.stream_name = redis_stream_name
-        self.consumer_group = redis_consumer_group
+        self.list_name = redis_list_name
 
     def add_prefix(self, key: str) -> str:
         """为 Redis key 添加前缀
@@ -63,42 +61,14 @@ class Redis:
         return f"redis://{self.host}:{self.port}/{self.db}"
 
 
-class Collector:
+class Consumer:
     def __init__(
-        self, 
-        batch_size: int, 
-        batch_timeout: float, 
-        max_retries: int, 
-        retry_delay: float
+        self,
+        batch_size: int,
+        block_timeout: int,
     ):
         self.batch_size = batch_size
-        self.batch_timeout = batch_timeout
-        self.max_retries = max_retries
-        self.retry_delay = retry_delay
-
-
-class Docker:
-    def __init__(
-        self,
-        docker_socket: str,
-        docker_tail: int,
-        docker_follow: bool
-    ):
-        self.socket = docker_socket
-        self.tail = docker_tail
-        self.follow = docker_follow
-
-
-class Deduplication:
-    def __init__(
-        self,
-        enabled: bool,
-        window: int,
-        ttl: int,
-    ):
-        self.enabled = enabled
-        self.window = window
-        self.ttl = ttl
+        self.block_timeout = block_timeout
 
 
 class Settings(BaseSettings):
@@ -121,29 +91,15 @@ class Settings(BaseSettings):
     redis_password: str | None = Field(default=None, alias="REDIS_PASSWORD")
     redis_db: int = Field(default=0, alias="REDIS_DB")
     redis_key_prefix: str = Field(default="auperator:", alias="REDIS_KEY_PREFIX")
-    redis_stream_name: str = Field(default="logs:main", alias="REDIS_STREAM_NAME")
-    redis_consumer_group: str = Field(default="auperator-group", alias="REDIS_CONSUMER_GROUP")
+    redis_list_name: str = Field(default="logs:main", alias="REDIS_LIST_NAME")
 
-    # 采集器配置
-    collector_batch_size: int = Field(default=100, alias="COLLECTOR_BATCH_SIZE")
-    collector_batch_timeout: float = Field(default=5.0, alias="COLLECTOR_BATCH_TIMEOUT")
-    collector_max_retries: int = Field(default=3, alias="COLLECTOR_MAX_RETRIES")
-    collector_retry_delay: float = Field(default=1.0, alias="COLLECTOR_RETRY_DELAY")
-
-    # Docker 配置
-    docker_socket: str = Field(default="/var/run/docker.sock", alias="DOCKER_SOCKET")
-    docker_tail: int = Field(default=100, alias="DOCKER_TAIL")
-    docker_follow: bool = Field(default=True, alias="DOCKER_FOLLOW")
-
-    # 去重配置
-    deduplication_enabled: bool = Field(default=True, alias="DEDUPLICATION_ENABLED")
-    deduplication_window: int = Field(default=86400, alias="DEDUPLICATION_WINDOW")  # 24小时
-    deduplication_ttl: int = Field(default=604800, alias="DEDUPLICATION_TTL")  # 7天
+    # 消费者配置
+    consumer_batch_size: int = Field(default=1, alias="CONSUMER_BATCH_SIZE")
+    consumer_block_timeout: int = Field(default=5, alias="CONSUMER_BLOCK_TIMEOUT")
 
     # 通用配置
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     environment: str = Field(default="development", alias="ENVIRONMENT")
-    agent_service: str = Field(default="auperator", alias="AGENT_SERVICE")
 
     @field_validator("log_level")
     @classmethod
@@ -162,29 +118,14 @@ class Settings(BaseSettings):
             self.redis_password,
             self.redis_db,
             self.redis_key_prefix,
-            self.redis_stream_name,
-            self.redis_consumer_group
+            self.redis_list_name,
         )
 
     @property
-    def collector(self):
-        return Collector(
-            self.collector_batch_size, 
-            self.collector_batch_timeout, 
-            self.collector_max_retries, 
-            self.collector_retry_delay
-        )
-
-    @property
-    def docker(self):
-        return Docker(self.docker_socket, self.docker_tail, self.docker_follow)
-
-    @property
-    def deduplication(self):
-        return Deduplication(
-            self.deduplication_enabled,
-            self.deduplication_window,
-            self.deduplication_ttl,
+    def consumer(self):
+        return Consumer(
+            self.consumer_batch_size,
+            self.consumer_block_timeout,
         )
 
     def get_redis_url(self) -> str:
