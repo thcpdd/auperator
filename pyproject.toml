@@ -12,6 +12,7 @@ dependencies = [
     "pydantic>=2.0.0",
     "redis>=7.2.1",
     "pydantic-settings>=2.13.1",
+    "wcmatch>=10.1",
 ]
 
 [project.scripts]
