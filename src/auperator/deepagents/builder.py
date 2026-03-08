@@ -19,6 +19,7 @@ from langgraph.types import Checkpointer
 
 from auperator.config import settings
 from .backends import StateBackend
+from .backends.filesystem import FilesystemBackend
 from .backends.protocol import BackendFactory, BackendProtocol
 from .middleware.filesystem import FilesystemMiddleware
 from .middleware.memory import MemoryMiddleware
@@ -178,7 +179,14 @@ def create_deep_agent(  # noqa: C901, PLR0912  # Complex graph assembly logic wi
     """
     model = get_default_model() if model is None else resolve_model(model)
 
-    backend = backend if backend is not None else (StateBackend)
+    # Determine default backend based on configuration
+    if backend is None:
+        # If TARGET_PROJECT_PATH is configured, use FilesystemBackend for direct filesystem access
+        if settings.target_project_path:
+            backend = FilesystemBackend(root_dir=settings.target_project_path, virtual_mode=True)
+        else:
+            # Otherwise, use StateBackend (ephemeral storage in agent state)
+            backend = StateBackend
 
     # Build general-purpose subagent with default middleware stack
     gp_middleware: list[AgentMiddleware[Any, Any, Any]] = [

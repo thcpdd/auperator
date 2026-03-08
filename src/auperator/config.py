@@ -102,6 +102,10 @@ class Settings(BaseSettings):
     consumer_batch_size: int = Field(default=1, alias="CONSUMER_BATCH_SIZE")
     consumer_block_timeout: int = Field(default=5, alias="CONSUMER_BLOCK_TIMEOUT")
 
+    # 目标项目路径（用于代码修复）
+    # Agent 需要知道项目在宿主机的路径才能做出相关的行动
+    target_project_path: str = Field(default="", alias="TARGET_PROJECT_PATH")
+
     # 通用配置
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     environment: str = Field(default="development", alias="ENVIRONMENT")
