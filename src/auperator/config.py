@@ -7,6 +7,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from langfuse import Langfuse
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -110,6 +111,11 @@ class Settings(BaseSettings):
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     environment: str = Field(default="development", alias="ENVIRONMENT")
 
+    # LangFuse 配置
+    langfuse_public_key: str = Field(default="", alias="LANGFUSE_PUBLIC_KEY")
+    langfuse_secret_key: str = Field(default="", alias="LANGFUSE_SECRET_KEY")
+    langfuse_host: str = Field(default="", alias="LANGFUSE_HOST")
+
     @field_validator("log_level")
     @classmethod
     def validate_log_level(cls, v: str) -> str:
@@ -153,7 +159,20 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    _settings = Settings()
+
+    if all([
+        _settings.langfuse_public_key, 
+        _settings.langfuse_secret_key,
+        _settings.langfuse_host
+    ]):
+        # 初始化 Langfuse
+        Langfuse(
+            public_key=_settings.langfuse_public_key,
+            secret_key=_settings.langfuse_secret_key,
+            host=_settings.langfuse_host,
+        )
+    return _settings
 
 
 settings = get_settings()
