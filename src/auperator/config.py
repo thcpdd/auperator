@@ -112,6 +112,10 @@ class Settings(BaseSettings):
     langfuse_secret_key: str = Field(default="", alias="LANGFUSE_SECRET_KEY")
     langfuse_host: str = Field(default="", alias="LANGFUSE_HOST")
 
+    # Daytona 配置
+    daytona_api_key: str = Field(default="", alias="DAYTONA_API_KEY")
+    daytona_api_url: str = Field(default="https://app.daytona.io/api", alias="DAYTONA_API_URL")
+
     @field_validator("log_level")
     @classmethod
     def validate_log_level(cls, v: str) -> str:
