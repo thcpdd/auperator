@@ -151,3 +151,9 @@ The following components are kept for backward compatibility but are not used in
 - `RedisHandler` (Vector writes directly to Redis)
 - `PositionManager` (Vector handles position tracking)
 - Legacy CLI commands (`docker`, `list`, `show-position`, etc.)
+
+## 配置文件修改
+
+如果你需要修改配置文件，那么你通常需要修改两个。例如当你要修改.env.example的时候，那么你不要忘记继续修改.env文件。
+
+总之，样例文件和正式文件的配置项需要统一。统一指的是配置项统一，而不是配置的值统一。
