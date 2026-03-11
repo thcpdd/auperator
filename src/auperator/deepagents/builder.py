@@ -18,7 +18,6 @@ from langgraph.store.base import BaseStore
 from langgraph.types import Checkpointer
 
 from auperator.config import settings
-from .backends import StateBackend
 from .backends.filesystem import FilesystemBackend
 from .backends.protocol import BackendFactory, BackendProtocol
 from .middleware.filesystem import FilesystemMiddleware
@@ -179,14 +178,10 @@ def create_deep_agent(  # noqa: C901, PLR0912  # Complex graph assembly logic wi
     """
     model = get_default_model() if model is None else resolve_model(model)
 
-    # Determine default backend based on configuration
+    # Use FilesystemBackend with auperator project root
+    # Agent can only access files in the current project directory
     if backend is None:
-        # If TARGET_PROJECT_PATH is configured, use FilesystemBackend for direct filesystem access
-        if settings.target_project_path:
-            backend = FilesystemBackend(root_dir=settings.target_project_path, virtual_mode=True)
-        else:
-            # Otherwise, use StateBackend (ephemeral storage in agent state)
-            backend = StateBackend
+        backend = FilesystemBackend(root_dir=".", virtual_mode=True)
 
     # Build general-purpose subagent with default middleware stack
     gp_middleware: list[AgentMiddleware[Any, Any, Any]] = [
