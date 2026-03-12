@@ -9,7 +9,12 @@ import asyncio
 import base64
 import json
 import sys
-from pathlib import Path
+
+from auperator.services.daytona_service import (
+    SandboxCommandError,
+    SandboxNotFoundError,
+    DaytonaService
+)
 
 
 async def main():
@@ -21,13 +26,6 @@ async def main():
     command = sys.argv[1]
 
     try:
-        # Import here to avoid import errors when Daytona is not installed
-        from auperator.services.daytona_service import (
-            SandboxCommandError,
-            SandboxNotFoundError,
-            DaytonaService,
-        )
-
         async with DaytonaService() as service:
             if command == "create":
                 # Create a new sandbox

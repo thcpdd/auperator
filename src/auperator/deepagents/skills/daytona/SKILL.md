@@ -7,13 +7,12 @@ description: Use when code execution, file operations, or command execution in a
 
 ## Overview
 
-Daytona provides isolated sandbox environments for safe code execution, file operations, and command execution. Use the `daytona_cli.py` script to interact with sandboxes - no code writing required.
+Daytona provides isolated sandbox environments for safe code execution and command execution. **Most file operations can be done through shell commands** - use the `execute` command for maximum flexibility.
 
 ## When to Use
 
 - Executing untrusted or potentially unsafe code
 - Running commands that might modify the system
-- Performing file operations in an isolated environment
 - Cloning and manipulating Git repositories
 - Testing code changes before deployment
 - Any scenario requiring isolation from the host system
@@ -23,16 +22,8 @@ Daytona provides isolated sandbox environments for safe code execution, file ope
 | Operation | Command | Description |
 |-----------|---------|-------------|
 | **Create** | `execute python3 src/auperator/deepagents/skills/daytona/scripts/daytona_cli.py create` | Create new sandbox, returns `sandbox_id` |
-| **Destroy** | `execute python3 .../daytona_cli.py destroy <sandbox_id>` | Terminate sandbox |
-| **Info** | `execute python3 .../daytona_cli.py info <sandbox_id>` | Get sandbox status and resources |
-| **List** | `execute python3 .../daytona_cli.py list` | List all active sandboxes |
 | **Execute** | `execute python3 .../daytona_cli.py execute <sandbox_id> <command> [cwd] [timeout]` | Run shell command in sandbox |
-| **Read** | `execute python3 .../daytona_cli.py read <sandbox_id> <path>` | Read file content |
-| **Write** | `execute python3 .../daytona_cli.py write <sandbox_id> <path> <content>` | Write content to file |
-| **Write Base64** | `execute python3 .../daytona_cli.py write-base64 <sandbox_id> <path> <content_b64>` | Write base64-encoded content |
-| **List Files** | `execute python3 .../daytona_cli.py ls <sandbox_id> <path>` | List directory contents |
-| **Delete** | `execute python3 .../daytona_cli.py delete <sandbox_id> <path>` | Delete a file |
-| **Clone** | `execute python3 .../daytona_cli.py clone <sandbox_id> <repo_url> [branch] [target_dir] [username] [password]` | Clone Git repository |
+| **Destroy** | `execute python3 .../daytona_cli.py destroy <sandbox_id>` | Terminate sandbox |
 
 **CLI Script Path**: `src/auperator/deepagents/skills/daytona/scripts/daytona_cli.py`
 
@@ -47,9 +38,31 @@ Returns:
 {"sandbox_id": "sb-1234567890"}
 ```
 
-### 2. Execute Commands
+### 2. Execute Commands (File Operations via Shell)
 ```bash
-execute python3 src/auperator/deepagents/skills/daytona/scripts/daytona_cli.py execute sb-1234567890 "ls -la /workspace"
+# Check file size first
+execute python3 .../daytona_cli.py execute sb-1234567890 "wc -l /workspace/test.py"
+
+# Read first 100 lines (efficient)
+execute python3 .../daytona_cli.py execute sb-1234567890 "head -n 100 /workspace/test.py"
+
+# Read last 50 lines (efficient)
+execute python3 .../daytona_cli.py execute sb-1234567890 "tail -n 50 /workspace/test.py"
+
+# Read specific lines 100-200 (efficient)
+execute python3 .../daytona_cli.py execute sb-1234567890 "sed -n '100,200p' /workspace/test.py"
+
+# List directory contents
+execute python3 .../daytona_cli.py execute sb-1234567890 "ls -la /workspace"
+
+# Write a file (using heredoc for multi-line content)
+execute python3 .../daytona_cli.py execute sb-1234567890 "cat > /workspace/test.py << 'EOF'\nprint('hello')\nEOF"
+
+# Delete a file
+execute python3 .../daytona_cli.py execute sb-1234567890 "rm /workspace/test.py"
+
+# Clone Git repository
+execute python3 .../daytona_cli.py execute sb-1234567890 "git clone https://github.com/user/repo.git workspace/repo"
 ```
 Returns:
 ```json
@@ -61,29 +74,7 @@ Returns:
 }
 ```
 
-### 3. Write and Read Files
-```bash
-# Write file
-execute python3 src/auperator/deepagents/skills/daytona/scripts/daytona_cli.py write sb-1234567890 /workspace/test.py "print('hello')"
-
-# Read file
-execute python3 src/auperator/deepagents/skills/daytona/scripts/daytona_cli.py read sb-1234567890 /workspace/test.py
-```
-Returns:
-```json
-{
-  "content": "print('hello')",
-  "content_b64": "cHJpbnQoJ2hlbGxvJyk=",
-  "path": "/workspace/test.py"
-}
-```
-
-### 4. Clone Repository
-```bash
-execute python3 src/auperator/deepagents/skills/daytona/scripts/daytona_cli.py clone sb-1234567890 https://github.com/user/repo.git main workspace/repo
-```
-
-### 5. Always Cleanup
+### 3. Always Cleanup
 ```bash
 execute python3 src/auperator/deepagents/skills/daytona/scripts/daytona_cli.py destroy sb-1234567890
 ```
@@ -92,14 +83,64 @@ Returns:
 {"status": "destroyed", "sandbox_id": "sb-1234567890"}
 ```
 
+## Common File Operations (via Execute)
+
+### Best Practices: Limit Output Size
+
+**IMPORTANT**: Always limit the amount of data transferred to avoid performance issues.
+
+| Goal | Command | Why |
+|------|---------|-----|
+| Read first N lines | `head -n 100 <path>` | Only reads beginning of file |
+| Read last N lines | `tail -n 100 <path>` | Only reads end of file |
+| Read specific lines | `sed -n '100,200p' <path>` | Reads specific line range |
+| Count lines first | `wc -l <path>` | Check file size before reading |
+| Read file around line | `sed -n '50,60p' <path>` | Read specific context (e.g., error line ±5) |
+
+**When to use `cat`:** Only for very small files (< 1KB) that you need to read entirely.
+
+### File Operations Reference
+
+| Operation | Shell Command |
+|-----------|--------------|
+| Read first 100 lines | `head -n 100 <path>` |
+| Read last 100 lines | `tail -n 100 <path>` |
+| Read lines 100-200 | `sed -n '100,200p' <path>` |
+| Count lines | `wc -l <path>` |
+| List directory | `ls -la <path>` |
+| Write single line | `echo 'content' > <path>` |
+| Write multi-line | `cat > <path> << 'EOF'\ncontent\nEOF` |
+| Delete file | `rm <path>` |
+| Create directory | `mkdir -p <path>` |
+| Move/Rename | `mv <src> <dst>` |
+| Copy | `cp <src> <dst>` |
+| Clone repo | `git clone <url> <path>` |
+| Check git status | `git -C <path> status` |
+
+### Example: Reading File Efficiently
+
+```bash
+# First, check file size
+execute python3 .../daytona_cli.py execute sb-123 "wc -l /workspace/app.py"
+# -> stdout: "1500 app.py"
+
+# File has 1500 lines, read only relevant section
+execute python3 .../daytona_cli.py execute sb-123 "sed -n '1,100p' /workspace/app.py"  # First 100 lines
+execute python3 .../daytona_cli.py execute sb-123 "sed -n '1400,1500p' /workspace/app.py"  # Last 100 lines
+
+# If error on line 750, read context around it
+execute python3 .../daytona_cli.py execute sb-123 "sed -n '745,755p' /workspace/app.py"
+```
+
 ## Common Mistakes
 
 | Mistake | Issue | Fix |
 |---------|-------|-----|
 | Forgetting to destroy sandbox | Resource leak | Always call `destroy` after use |
 | Not using correct path | Command not found | Use path from skill root: `src/auperator/deepagents/skills/daytona/scripts/daytona_cli.py` |
-| Not handling JSON errors | Crashes on failure | Check `error_type` in response |
-| Using `write` with special chars | Shell escaping issues | Use `write-base64` for complex content |
+| Shell escaping issues | Command fails | Use single quotes for heredoc EOF: `<< 'EOF'` |
+| Reading entire file with `cat` | Slow, excessive data transfer | Use `head -n N`, `tail -n N`, or `sed -n 'M,Np'` |
+| Not checking file size first | May read huge files | Use `wc -l <path>` to check line count first |
 
 ## Error Handling
 
@@ -112,24 +153,3 @@ All commands return JSON with `error` and `error_type` on failure:
 **Error Types**:
 - `SandboxNotFoundError`: Sandbox doesn't exist
 - `SandboxCommandError`: Command execution failed
-- Other: Check `error_type` for specific exception
-
-## Example: Complete Workflow
-
-```bash
-# 1. Create sandbox
-execute python3 src/auperator/deepagents/skills/daytona/scripts/daytona_cli.py create
-# -> {"sandbox_id": "sb-abc123"}
-
-# 2. Clone repo
-execute python3 src/auperator/deepagents/skills/daytona/scripts/daytona_cli.py clone sb-abc123 https://github.com/user/repo.git
-
-# 3. Run tests
-execute python3 src/auperator/deepagents/skills/daytona/scripts/daytona_cli.py execute sb-abc123 "cd workspace/repo && python -m pytest"
-
-# 4. Read results
-execute python3 src/auperator/deepagents/skills/daytona/scripts/daytona_cli.py read sb-abc123 workspace/repo/test-results.txt
-
-# 5. Cleanup
-execute python3 src/auperator/deepagents/skills/daytona/scripts/daytona_cli.py destroy sb-abc123
-```
