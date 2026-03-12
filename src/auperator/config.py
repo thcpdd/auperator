@@ -115,6 +115,7 @@ class Settings(BaseSettings):
     # Daytona 配置
     daytona_api_key: str = Field(default="", alias="DAYTONA_API_KEY")
     daytona_api_url: str = Field(default="https://app.daytona.io/api", alias="DAYTONA_API_URL")
+    daytona_proxy_url: str = Field(default="http://localhost:8888", alias="DAYTONA_PROXY_URL")
 
     @field_validator("log_level")
     @classmethod

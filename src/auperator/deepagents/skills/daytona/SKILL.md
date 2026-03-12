@@ -21,17 +21,17 @@ Daytona provides isolated sandbox environments for safe code execution and comma
 
 | Operation | Command | Description |
 |-----------|---------|-------------|
-| **Create** | `execute python3 src/auperator/deepagents/skills/daytona/scripts/daytona_cli.py create` | Create new sandbox, returns `sandbox_id` |
-| **Execute** | `execute python3 .../daytona_cli.py execute <sandbox_id> <command> [cwd] [timeout]` | Run shell command in sandbox |
-| **Destroy** | `execute python3 .../daytona_cli.py destroy <sandbox_id>` | Terminate sandbox |
+| **Create** | `execute python3 src/auperator/deepagents/skills/daytona/scripts/daytona_proxy_cli.py create` | Create new sandbox, returns `sandbox_id` |
+| **Execute** | `execute python3 .../daytona_proxy_cli.py execute <sandbox_id> <command> [cwd] [timeout]` | Run shell command in sandbox |
+| **Destroy** | `execute python3 .../daytona_proxy_cli.py destroy <sandbox_id>` | Terminate sandbox |
 
-**CLI Script Path**: `src/auperator/deepagents/skills/daytona/scripts/daytona_cli.py`
+**CLI Script Path**: `src/auperator/deepagents/skills/daytona/scripts/daytona_proxy_cli.py`
 
 ## Usage Workflow
 
 ### 1. Create a Sandbox
 ```bash
-execute python3 src/auperator/deepagents/skills/daytona/scripts/daytona_cli.py create
+execute python3 src/auperator/deepagents/skills/daytona/scripts/daytona_proxy_cli.py create
 ```
 Returns:
 ```json
@@ -41,28 +41,28 @@ Returns:
 ### 2. Execute Commands (File Operations via Shell)
 ```bash
 # Check file size first
-execute python3 .../daytona_cli.py execute sb-1234567890 "wc -l /workspace/test.py"
+execute python3 .../daytona_proxy_cli.py execute sb-1234567890 "wc -l /workspace/test.py"
 
 # Read first 100 lines (efficient)
-execute python3 .../daytona_cli.py execute sb-1234567890 "head -n 100 /workspace/test.py"
+execute python3 .../daytona_proxy_cli.py execute sb-1234567890 "head -n 100 /workspace/test.py"
 
 # Read last 50 lines (efficient)
-execute python3 .../daytona_cli.py execute sb-1234567890 "tail -n 50 /workspace/test.py"
+execute python3 .../daytona_proxy_cli.py execute sb-1234567890 "tail -n 50 /workspace/test.py"
 
 # Read specific lines 100-200 (efficient)
-execute python3 .../daytona_cli.py execute sb-1234567890 "sed -n '100,200p' /workspace/test.py"
+execute python3 .../daytona_proxy_cli.py execute sb-1234567890 "sed -n '100,200p' /workspace/test.py"
 
 # List directory contents
-execute python3 .../daytona_cli.py execute sb-1234567890 "ls -la /workspace"
+execute python3 .../daytona_proxy_cli.py execute sb-1234567890 "ls -la /workspace"
 
 # Write a file (using heredoc for multi-line content)
-execute python3 .../daytona_cli.py execute sb-1234567890 "cat > /workspace/test.py << 'EOF'\nprint('hello')\nEOF"
+execute python3 .../daytona_proxy_cli.py execute sb-1234567890 "cat > /workspace/test.py << 'EOF'\nprint('hello')\nEOF"
 
 # Delete a file
-execute python3 .../daytona_cli.py execute sb-1234567890 "rm /workspace/test.py"
+execute python3 .../daytona_proxy_cli.py execute sb-1234567890 "rm /workspace/test.py"
 
 # Clone Git repository
-execute python3 .../daytona_cli.py execute sb-1234567890 "git clone https://github.com/user/repo.git workspace/repo"
+execute python3 .../daytona_proxy_cli.py execute sb-1234567890 "git clone https://github.com/user/repo.git workspace/repo"
 ```
 Returns:
 ```json
@@ -76,7 +76,7 @@ Returns:
 
 ### 3. Always Cleanup
 ```bash
-execute python3 src/auperator/deepagents/skills/daytona/scripts/daytona_cli.py destroy sb-1234567890
+execute python3 src/auperator/deepagents/skills/daytona/scripts/daytona_proxy_cli.py destroy sb-1234567890
 ```
 Returns:
 ```json
@@ -121,15 +121,15 @@ Returns:
 
 ```bash
 # First, check file size
-execute python3 .../daytona_cli.py execute sb-123 "wc -l /workspace/app.py"
+execute python3 .../daytona_proxy_cli.py execute sb-123 "wc -l /workspace/app.py"
 # -> stdout: "1500 app.py"
 
 # File has 1500 lines, read only relevant section
-execute python3 .../daytona_cli.py execute sb-123 "sed -n '1,100p' /workspace/app.py"  # First 100 lines
-execute python3 .../daytona_cli.py execute sb-123 "sed -n '1400,1500p' /workspace/app.py"  # Last 100 lines
+execute python3 .../daytona_proxy_cli.py execute sb-123 "sed -n '1,100p' /workspace/app.py"  # First 100 lines
+execute python3 .../daytona_proxy_cli.py execute sb-123 "sed -n '1400,1500p' /workspace/app.py"  # Last 100 lines
 
 # If error on line 750, read context around it
-execute python3 .../daytona_cli.py execute sb-123 "sed -n '745,755p' /workspace/app.py"
+execute python3 .../daytona_proxy_cli.py execute sb-123 "sed -n '745,755p' /workspace/app.py"
 ```
 
 ## Common Mistakes
@@ -137,7 +137,7 @@ execute python3 .../daytona_cli.py execute sb-123 "sed -n '745,755p' /workspace/
 | Mistake | Issue | Fix |
 |---------|-------|-----|
 | Forgetting to destroy sandbox | Resource leak | Always call `destroy` after use |
-| Not using correct path | Command not found | Use path from skill root: `src/auperator/deepagents/skills/daytona/scripts/daytona_cli.py` |
+| Not using correct path | Command not found | Use path from skill root: `src/auperator/deepagents/skills/daytona/scripts/daytona_proxy_cli.py` |
 | Shell escaping issues | Command fails | Use single quotes for heredoc EOF: `<< 'EOF'` |
 | Reading entire file with `cat` | Slow, excessive data transfer | Use `head -n N`, `tail -n N`, or `sed -n 'M,Np'` |
 | Not checking file size first | May read huge files | Use `wc -l <path>` to check line count first |
