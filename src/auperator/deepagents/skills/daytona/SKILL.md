@@ -17,17 +17,29 @@ Daytona provides isolated sandbox environments for safe code execution and comma
 - Testing code changes before deployment
 - Any scenario requiring isolation from the host system
 
+## Usage Guidelines
+
+**IMPORTANT**: Follow these guidelines to manage sandbox resources efficiently:
+
+| Guideline | Description |
+|-----------|-------------|
+| **Reuse existing sandboxes** | Before creating a new sandbox, use `list` to check if an existing sandbox is available. Reusing sandboxes reduces resource consumption and startup time. |
+| **Avoid creating unnecessary sandboxes** | Only create a new sandbox when absolutely necessary (e.g., no existing sandbox meets your needs). |
+| **Avoid destroying sandboxes** | Do not use the `destroy` operation unless explicitly required. Sandboxes are designed to persist and can be reused across sessions. |
+
 ## Quick Reference
 
 | Operation | Command | Description |
 |-----------|---------|-------------|
 | **Create** | `execute python3 src/auperator/deepagents/skills/daytona/scripts/daytona_proxy_cli.py create` | Create new sandbox, returns `sandbox_id` |
 | **Execute** | `execute python3 .../daytona_proxy_cli.py execute <sandbox_id> <command> [cwd] [timeout]` | Run shell command in sandbox |
+| **List** | `execute python3 .../daytona_proxy_cli.py list` | List all sandboxes |
+| **Info** | `execute python3 .../daytona_proxy_cli.py info <sandbox_id>` | Get sandbox information |
 | **Destroy** | `execute python3 .../daytona_proxy_cli.py destroy <sandbox_id>` | Terminate sandbox |
 
 **CLI Script Path**: `src/auperator/deepagents/skills/daytona/scripts/daytona_proxy_cli.py`
 
-## Usage Workflow
+## Usage
 
 ### 1. Create a Sandbox
 ```bash
@@ -38,7 +50,36 @@ Returns:
 {"sandbox_id": "sb-1234567890"}
 ```
 
-### 2. Execute Commands (File Operations via Shell)
+### 2. List All Sandboxes
+```bash
+execute python3 src/auperator/deepagents/skills/daytona/scripts/daytona_proxy_cli.py list
+```
+Returns:
+```json
+{
+  "sandboxes": [
+    {"sandbox_id": "sb-1234567890", "status": "running", "created_at": "..."},
+    {"sandbox_id": "sb-0987654321", "status": "running", "created_at": "..."}
+  ],
+  "count": 2
+}
+```
+
+### 3. Get Sandbox Info
+```bash
+execute python3 src/auperator/deepagents/skills/daytona/scripts/daytona_proxy_cli.py info sb-1234567890
+```
+Returns:
+```json
+{
+  "sandbox_id": "sb-1234567890",
+  "status": "running",
+  "created_at": "...",
+  "workspace_path": "/workspace/sb-1234567890"
+}
+```
+
+### 4. Execute Commands (File Operations via Shell)
 ```bash
 # Check file size first
 execute python3 .../daytona_proxy_cli.py execute sb-1234567890 "wc -l /workspace/test.py"
@@ -72,15 +113,6 @@ Returns:
   "exit_code": 0,
   "execution_time_ms": 0
 }
-```
-
-### 3. Always Cleanup
-```bash
-execute python3 src/auperator/deepagents/skills/daytona/scripts/daytona_proxy_cli.py destroy sb-1234567890
-```
-Returns:
-```json
-{"status": "destroyed", "sandbox_id": "sb-1234567890"}
 ```
 
 ## Common File Operations (via Execute)
@@ -136,11 +168,12 @@ execute python3 .../daytona_proxy_cli.py execute sb-123 "sed -n '745,755p' /work
 
 | Mistake | Issue | Fix |
 |---------|-------|-----|
-| Forgetting to destroy sandbox | Resource leak | Always call `destroy` after use |
+| Creating sandboxes without checking existing ones | Resource waste | Always run `list` first to check for available sandboxes |
 | Not using correct path | Command not found | Use path from skill root: `src/auperator/deepagents/skills/daytona/scripts/daytona_proxy_cli.py` |
 | Shell escaping issues | Command fails | Use single quotes for heredoc EOF: `<< 'EOF'` |
 | Reading entire file with `cat` | Slow, excessive data transfer | Use `head -n N`, `tail -n N`, or `sed -n 'M,Np'` |
 | Not checking file size first | May read huge files | Use `wc -l <path>` to check line count first |
+| Destroying sandboxes unnecessarily | Loss of reusable resources | Avoid using `destroy` unless explicitly required |
 
 ## Error Handling
 
