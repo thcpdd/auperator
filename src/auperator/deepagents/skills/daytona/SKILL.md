@@ -9,6 +9,10 @@ description: Use when code execution, file operations, or command execution in a
 
 Daytona provides isolated sandbox environments for safe code execution and command execution. **Most file operations can be done through shell commands** - use the `execute` command for maximum flexibility.
 
+## Workspace Directory
+
+In the sandbox, the `/home/daytona` is your workspace directory. Your all operations will execute in there.
+
 ## When to Use
 
 - Executing untrusted or potentially unsafe code
@@ -37,7 +41,7 @@ Daytona provides isolated sandbox environments for safe code execution and comma
 | **Info** | `execute python3 .../daytona_proxy_cli.py info <sandbox_id>` | Get sandbox information |
 | **Destroy** | `execute python3 .../daytona_proxy_cli.py destroy <sandbox_id>` | Terminate sandbox |
 
-**CLI Script Path**: `src/auperator/deepagents/skills/daytona/scripts/daytona_proxy_cli.py`
+**CLI Script Path(Don't use absolute path)**: `src/auperator/deepagents/skills/daytona/scripts/daytona_proxy_cli.py`
 
 ## Usage
 
