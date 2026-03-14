@@ -117,6 +117,12 @@ class Settings(BaseSettings):
     daytona_api_url: str = Field(default="https://app.daytona.io/api", alias="DAYTONA_API_URL")
     daytona_proxy_url: str = Field(default="http://localhost:8888", alias="DAYTONA_PROXY_URL")
 
+    # 远程仓库配置
+    remote_repo_url: str = Field(default="", alias="REMOTE_REPO_URL")
+
+    # GitHub 配置
+    github_token: str = Field(default="", alias="GITHUB_TOKEN")
+
     @field_validator("log_level")
     @classmethod
     def validate_log_level(cls, v: str) -> str:
