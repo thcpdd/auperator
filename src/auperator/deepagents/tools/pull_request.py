@@ -5,7 +5,6 @@ on Git platforms (GitHub, GitLab, Gitee, etc.).
 """
 
 import logging
-import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Optional
@@ -241,7 +240,7 @@ class GitHubProvider(GitProvider):
 _providers: dict[str, GitProvider] = {}
 
 
-def get_provider(provider: str = "github", token: Optional[str] = None) -> GitProvider:
+def get_provider(provider: str = "github") -> GitProvider:
     """获取 Git 提供者实例
 
     Args:
@@ -253,7 +252,7 @@ def get_provider(provider: str = "github", token: Optional[str] = None) -> GitPr
     """
     if provider not in _providers:
         if provider == "github":
-            _providers[provider] = GitHubProvider(token=token)
+            _providers[provider] = GitHubProvider()
         else:
             raise ValueError(f"不支持的 Git 提供者：{provider}")
 
