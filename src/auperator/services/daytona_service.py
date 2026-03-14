@@ -3,7 +3,7 @@
 import logging
 from typing import Any
 
-from daytona import AsyncDaytona, DaytonaConfig
+from daytona import AsyncDaytona, DaytonaConfig, AsyncSandbox
 
 from auperator.config import settings
 
@@ -101,11 +101,42 @@ class DaytonaService:
             assert self._daytona is not None
             sandbox = await self._daytona.create()
             logger.info(f"Sandbox created: {sandbox.id}")
+
+            # Auto-configure Git authentication for GitHub
+            await self._configure_git_auth(sandbox)
+
             return sandbox.id
 
         except Exception as e:
             logger.error(f"Failed to create sandbox: {e}")
             raise
+
+    async def _configure_git_auth(self, sandbox: AsyncSandbox) -> None:
+        """Configure Git authentication in the sandbox.
+
+        Sets up Git user info and GitHub token authentication.
+
+        Args:
+            sandbox: Sandbox instance
+        """
+        try:
+            # Configure Git user info
+            await sandbox.process.exec('git config --global user.name "Auperator Bot"')
+            await sandbox.process.exec('git config --global user.email "auperator@example.com"')
+
+            # Configure GitHub token authentication if available
+            github_token = settings.github_token
+            if github_token:
+                # URL rewriting to inject token into GitHub HTTPS URLs
+                await sandbox.process.exec(
+                    f'git config --global url."https://{github_token}@github.com/".insteadOf "https://github.com/"'
+                )
+                logger.info("GitHub token authentication configured")
+            else:
+                logger.warning("GITHUB_TOKEN not set, Git push operations may fail")
+
+        except Exception as e:
+            logger.warning(f"Failed to configure Git authentication: {e}")
 
     async def destroy_sandbox(self, sandbox_id: str) -> None:
         """Destroy a sandbox.
