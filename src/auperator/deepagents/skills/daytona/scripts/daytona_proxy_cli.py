@@ -15,7 +15,7 @@ from auperator.config import settings
 
 
 # Proxy server configuration (from settings)
-PROXY_BASE_URL = settings.daytona_proxy_url
+PROXY_BASE_URL = f"http://{settings.api_host}:{settings.api_port}"
 
 
 def print_json(data: dict[str, Any]) -> None:
@@ -89,16 +89,6 @@ def list_sandboxes() -> None:
         print_error(response.json().get("detail", "Unknown error"), "ListError")
 
 
-def health_check() -> None:
-    """Check proxy server health."""
-    response = httpx.get(f"{PROXY_BASE_URL}/health")
-
-    if response.status_code == 200:
-        print_json(response.json())
-    else:
-        print_error("Proxy server not healthy", "HealthError")
-
-
 def main():
     """Main CLI entry point."""
     if len(sys.argv) < 2:
@@ -143,9 +133,6 @@ def main():
 
     elif command == "list":
         list_sandboxes()
-
-    elif command == "health":
-        health_check()
 
     else:
         print_error(f"Unknown command: {command}", "CommandError")

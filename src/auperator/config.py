@@ -86,6 +86,12 @@ class Settings(BaseSettings):
         populate_by_name=True,
     )
 
+    # API 配置
+    api_host: str = Field(default="127.0.0.1", alias="API_HOST")
+    api_port: int = Field(default=7000, alias="API_PORT")
+    api_reload: bool = Field(default=False, alias="API_RELOAD")
+    api_workers: int = Field(default=1, alias="API_WORKERS")
+
     # OpenAI 配置
     openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")
     openai_base_url: str = Field(default="", alias="OPENAI_BASE_URL")
@@ -115,7 +121,6 @@ class Settings(BaseSettings):
     # Daytona 配置
     daytona_api_key: str = Field(default="", alias="DAYTONA_API_KEY")
     daytona_api_url: str = Field(default="https://app.daytona.io/api", alias="DAYTONA_API_URL")
-    daytona_proxy_url: str = Field(default="http://localhost:8888", alias="DAYTONA_PROXY_URL")
 
     # 远程仓库配置
     remote_repo_url: str = Field(default="", alias="REMOTE_REPO_URL")
