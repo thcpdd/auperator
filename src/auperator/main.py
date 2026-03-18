@@ -5,7 +5,7 @@ import uvicorn
 from fastapi import FastAPI
 
 from auperator.config import settings
-from auperator.routes import daytona_router
+from auperator.routes import daytona_router, vector_router
 from auperator.state import global_state
 
 logger = logging.getLogger(__name__)
@@ -18,17 +18,16 @@ async def lifespan(_: FastAPI):
     logger.info("Starting Auperator API Server")
     logger.info("=" * 60)
 
-    # 初始化服务
+    # 初始化所有服务
     try:
-        await global_state.initialize_daytona()
-        logger.info("✅ All services initialized successfully")
+        await global_state.initialize_all()
 
         yield
 
     finally:
-        # 清理服务
+        # 清理所有服务
         logger.info("Shutting down Auperator API Server...")
-        await global_state.cleanup_daytona()
+        await global_state.cleanup_all()
         logger.info("✅ Shutdown complete")
 
 
@@ -42,6 +41,7 @@ app = FastAPI(
 
 # 注册路由
 app.include_router(daytona_router)
+app.include_router(vector_router)
 
 
 @app.get("/health")
@@ -59,6 +59,5 @@ if __name__ == "__main__":
         host=settings.api_host,
         port=settings.api_port,
         reload=settings.api_reload,
-        workers=settings.api_workers,
-        log_level="info",
+        workers=settings.api_workers
     )

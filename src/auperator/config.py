@@ -128,6 +128,13 @@ class Settings(BaseSettings):
     # GitHub 配置
     github_token: str = Field(default="", alias="GITHUB_TOKEN")
 
+    # Drain3 配置
+    drain3_state_file: str = Field(default="drain3.json", alias="DRAIN3_STATE_FILE")
+    drain3_depth: int = Field(default=4, alias="DRAIN3_DEPTH")
+    drain3_max_clusters: int = Field(default=1000, alias="DRAIN3_MAX_CLUSTERS")
+    drain3_max_children: int = Field(default=100, alias="DRAIN3_MAX_CHILDREN")
+    drain3_sim_th: float = Field(default=0.4, alias="DRAIN3_SIM_TH")
+
     @field_validator("log_level")
     @classmethod
     def validate_log_level(cls, v: str) -> str:

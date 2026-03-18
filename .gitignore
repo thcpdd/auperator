@@ -19,3 +19,6 @@ wheels/
 # Custom files
 test*.py
 vector.yaml
+
+# Drain3 state file
+drain3.json
