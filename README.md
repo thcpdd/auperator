@@ -10,7 +10,7 @@ Auperator 致力于解决传统运维系统中的痛点：被动响应、依赖�
 
 ## 核心功能
 
-### 1. 日志采集器（集成 Vector.dev）
+### 1. 日志采集（集成 Vector.dev）
 
 使用专业的日志处理工具 **Vector.dev** 进行日志采集和处理。
 
@@ -21,48 +21,16 @@ Auperator 致力于解决传统运维系统中的痛点：被动响应、依赖�
 - **实时处理**：流式处理，低延迟
 - **结构化输出**：统一的 JSON 格式输出
 
-#### 架构
+### 2. 智能去重（集成 Drain3）
 
-```
-┌──────────────┐    ┌──────────────┐    ┌──────────────────┐    ┌──────────────┐
-│  Log Source  │───▶│    Vector    │───▶│  Redis List      │───▶│   Consumer   │
-│  (Docker)    │    │  (Collection)│    │  (logs:main)     │    │   (Agent)    │
-└──────────────┘    └──────────────┘    └──────────────────┘    └──────────────┘
-                          │
-                          ├─ Multiline aggregation
-                          ├─ Error filtering
-                          └─ Structured JSON output
-```
+使用 **Drain3** 算法进行日志模板提取和去重：
 
-#### Vector 输出示例
+- **在线学习**：持续学习新的日志模板
+- **模板提取**：自动识别日志中的变量部分
+- **智能去重**：相同模板的日志只处理一次
+- **状态持久化**：学习的模板持久化保存，重启不丢失
 
-```json
-{
-  "container_created_at": "2026-03-02T12:50:21.602172058Z",
-  "container_id": "6a0964310ac3...",
-  "container_name": "bug-web-backend-1",
-  "host": "6f29d7e9cc5b",
-  "image": "bug-web-backend",
-  "message": "INFO: 172.18.0.1:43532 - \"GET /api/stats HTTP/1.1\" 500 Internal Server Error",
-  "source_type": "docker_logs",
-  "stream": "stdout",
-  "timestamp": "2026-03-07T02:29:19.941390846Z"
-}
-```
-
-### 2. 日志消费者
-
-从 Redis List 消费 Vector 处理后的日志并转换为标准格式。
-
-```bash
-# 消费日志
-auperator-collector consume -v
-
-# 查看 List 信息
-auperator-collector list-info
-```
-
-### 3. 运维 Agent (Core Agent)
+### 3. 自动修复（AI Agent）
 
 基于 DeepAgents 架构的核心智能体，负责问题分析、决策和执行。
 
@@ -70,10 +38,34 @@ auperator-collector list-info
 
 | 能力 | 描述 |
 |------|------|
-| **Bug 定位** | 基于日志和上下文信息，精确定位问题根源 |
+| **问题分析** | 基于日志模板，分析错误根因 |
 | **代码沙箱** | 内置隔离的代码运行环境，安全执行修复代码 |
-| **自我进化** | 自动创建工具、积累 Skill、存储记忆 |
+| **自动修复** | 在沙箱中定位问题、实施修复、运行测试 |
 | **PR 提交** | 自动创建分支、提交代码、发起 Pull Request |
+
+## 架构
+
+```
+┌──────────────┐    ┌──────────────┐    ┌─────────────┐    ┌─────────────┐    ┌──────────────┐
+│  Docker      │───▶│    Vector    │───▶│  HTTP API   │───▶│   Drain3    │───▶│  Redis List  │
+│  Containers  │    │  (Collection)│    │  /ingest)   │    │  (Dedup)    │    │  (logs:main)│
+└──────────────┘    └──────────────┘    └─────────────┘    └─────────────┘    └──────────────┘
+                                                                 │
+                                                                 ▼
+                                                        ┌──────────────────┐
+                                                        │   Agent Handler  │
+                                                        │      Consumer    │
+                                                        └──────────────────┘
+```
+
+### 数据流
+
+1. **Vector** 采集 Docker 容器日志
+2. **Vector** 过滤错误日志（error、exception、traceback、5xx）
+3. **Vector** 发送到 Auperator API `/vector/ingest`
+4. **API** 使用 Drain3 提取日志模板并去重
+5. **API** 只推送新模板到 Redis List
+6. **Agent Handler** 消费日志并调用 Agent 修复
 
 ## 快速开始
 
@@ -82,6 +74,7 @@ auperator-collector list-info
 - Python 3.11+
 - Vector 0.40+
 - Redis 7+
+- Docker（用于日志采集）
 
 ### 安装
 
@@ -90,12 +83,8 @@ auperator-collector list-info
 git clone https://github.com/thcpdd/auperator.git
 cd auperator
 
-# 创建虚拟环境
-python -m venv .venv
-source .venv/bin/activate
-
 # 安装依赖
-pip install -e .
+uv pip install -e .
 ```
 
 ### 配置
@@ -103,6 +92,10 @@ pip install -e .
 编辑 `.env` 文件：
 
 ```bash
+# API 配置
+API_HOST=127.0.0.1
+API_PORT=7000
+
 # Redis 配置
 REDIS_HOST=localhost
 REDIS_PORT=6379
@@ -111,128 +104,149 @@ REDIS_DB=0
 REDIS_KEY_PREFIX=auperator:
 REDIS_LIST_NAME=logs:main
 
-# 消费者配置
-CONSUMER_BATCH_SIZE=1
-CONSUMER_BLOCK_TIMEOUT=5
+# Drain3 配置
+DRAIN3_STATE_FILE=drain3.json
+DRAIN3_DEPTH=4
+DRAIN3_SIM_TH=0.4
 
-# 通用配置
-LOG_LEVEL=INFO
-ENVIRONMENT=development
+# OpenAI 配置
+OPENAI_API_KEY=your-api-key
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_MODEL=gpt-4
+
+# LangFuse 配置（可选）
+LANGFUSE_PUBLIC_KEY=
+LANGFUSE_SECRET_KEY=
+LANGFUSE_HOST=
+
+# Daytona 配置
+DAYTONA_API_KEY=
+DAYTONA_API_URL=https://app.daytona.io/api
+
+# Git 配置
+REMOTE_REPO_URL=git@github.com:username/repo.git
+GITHUB_TOKEN=your-github-token
 ```
 
-### 启动 Vector
-
-编辑 `vector.yaml` 配置文件，然后启动：
+### 启动服务
 
 ```bash
+# 1. 启动 Auperator API 服务
+auperator server
+
+# 2. 启动 Vector（另一个终端）
 vector --config vector.yaml
+
+# 3. 启动自动修复模式（第三个终端）
+auperator start
 ```
 
-### 消费日志
+## CLI 命令
+
+### 主命令
 
 ```bash
-# 消费 Vector 发送的日志
-auperator-collector consume -v
+# 启动 API 服务
+auperator server
+
+# 启动自动修复模式
+auperator start
+
+# 终端消费模式（调试）
+auperator terminal-consume -v
 
 # 查看 Redis List 信息
-auperator-collector list-info
+auperator list-info
+```
+
+### 命令选项
+
+```bash
+# server 命令选项
+auperator server [OPTIONS]
+
+选项：
+  -h, --host TEXT     API server host (default: 127.0.0.1)
+  -p, --port INT      API server port (default: 7000)
+  --reload            Enable auto-reload on code changes
+
+# start 命令选项
+auperator start [OPTIONS]
+
+选项：
+  -r, --redis TEXT         Redis 连接 URL
+  -e, --enable-langfuse    启用 Langfuse 追踪
+
+# terminal-consume 命令选项
+auperator terminal-consume [OPTIONS]
+
+选项：
+  -r, --redis TEXT     Redis 连接 URL
+  -l, --list TEXT      List 名称
+  -v, --verbose        详细输出模式
+
+# list-info 命令选项
+auperator list-info [OPTIONS]
+
+选项：
+  -r, --redis TEXT     Redis 连接 URL
+  -l, --list TEXT      List 名称
 ```
 
 ## 项目结构
 
 ```
 auperator/
-├── README.md                    # 项目文档
-├── CLAUDE.md                    # Claude Code 开发指南
-├── pyproject.toml               # Python 项目配置
-├── .env                         # 环境变量配置
-├── vector.yaml                  # Vector 配置
+├── README.md               # 项目文档
+├── CLAUDE.md               # Claude Code 开发指南
+├── pyproject.toml          # Python 项目配置
+├── .env                    # 环境变量配置
+├── .env.example            # 环境变量配置示例
+├── vector.yaml             # Vector 配置
+├── drain3.json             # Drain3 状态文件（自动生成）
 │
 ├── src/
 │   └── auperator/
-│       ├── __init__.py
 │       ├── cli.py               # 主命令行接口
+│       ├── server.py            # FastAPI 应用入口
 │       ├── config.py            # 配置管理
+│       ├── state.py             # 全局状态管理
+│       ├── dependencies.py      # 依赖注入
 │       │
-│       └── collector/           # 日志采集器模块
-│           ├── __init__.py
-│           ├── cli.py           # 采集器 CLI
-│           ├── models.py        # 数据模型
-│           ├── adapters/        # 日志适配器
-│           │   ├── __init__.py
-│           │   ├── base.py
-│           │   └── vector_adapter.py  # Vector JSON 适配器
-│           ├── handlers/        # 日志处理器
-│           │   ├── __init__.py
-│           │   ├── base.py
-│           │   └── console.py    # 控制台输出
-│           ├── sources/         # 日志源（保留用于扩展）
-│           │   ├── __init__.py
-│           │   └── base.py
-│           └── vector_consumer.py    # Vector Redis 消费者
+│       ├── collector/           # 日志采集和消费
+│       │   ├── handlers/        # 日志处理器
+│       │   │   ├── agent.py      # Agent 处理器（调用 LangGraph）
+│       │   │   └── console.py    # 控制台处理器（调试）
+│       │   └── vector_consumer.py # Redis List 消费者
+│       │
+│       ├── schemas/             # 数据模型
+│       │   ├── vector.py         # Vector 日志模型
+│       │   ├── daytona.py        # Daytona 模型
+│       │   └── log.py            # 日志数据模型
+│       │
+│       ├── services/            # 业务服务
+│       │   ├── drain3_service.py # Drain3 服务
+│       │   └── daytona_service.py # Daytona 沙箱服务
+│       │
+│       └── routes/              # FastAPI 路由
+│           ├── vector.py         # Vector 日志接收
+│           └── daytona.py        # 沙箱管理
 │
-└── tests/                       # 测试用例
+└── tests/                      # 测试用例
 ```
 
-## CLI 命令
+## Vector 配置
 
-### 采集器命令
-
-```bash
-# 消费日志
-auperator-collector consume [OPTIONS]
-
-# 查看 List 信息
-auperator-collector list-info [OPTIONS]
-
-# 选项：
-#   -r, --redis TEXT         Redis 连接 URL
-#   -l, --list TEXT          List 名称
-#   -v, --verbose            详细输出模式
-```
-
-## 扩展开发
-
-### 自定义日志适配器
-
-```python
-from auperator.collector.adapters.base import BaseLogAdapter
-from auperator.collector.models import LogEntry
-
-class CustomLogAdapter(BaseLogAdapter):
-    """自定义日志适配器"""
-
-    def parse(self, raw_line: str) -> LogEntry:
-        """解析原始日志"""
-        # 实现解析逻辑
-        pass
-```
-
-### 自定义日志处理器
-
-```python
-from auperator.collector.handlers.base import BaseLogHandler
-
-class CustomHandler(BaseLogHandler):
-    """自定义日志处理器"""
-
-    async def handle(self, entry: LogEntry) -> None:
-        """处理日志条目"""
-        # 实现处理逻辑
-        pass
-```
-
-## 配置文件
-
-### Vector 配置 (vector.yaml)
+### vector.yaml
 
 ```yaml
 sources:
   docker_logs:
     type: "docker_logs"
-    include_containers: ["container_name"]
+    include_containers: ["container_name"]  # 指定容器名称
 
 transforms:
+  # 多行日志聚合
   merged_logs:
     type: "reduce"
     inputs: ["docker_logs"]
@@ -244,40 +258,115 @@ transforms:
       match(msg, r'^(\d{4}|\[|\d{2}:\d{2}|INFO|DEBUG|WARN|ERROR|CRITICAL)')
     expire_after_ms: 1000
 
+  # 错误过滤
   error_only_filter:
     type: "filter"
     inputs: ["merged_logs"]
     condition: |
       msg = downcase(to_string(.message) ?? "")
-      contains(msg, "error") || contains(msg, "exception")
+      contains(msg, "error") ||
+      contains(msg, "exception") ||
+      contains(msg, "traceback") ||
+      contains(msg, "critical") ||
+      contains(msg, "fatal") ||
+      match(msg, r' (5\d{2}) ')
 
 sinks:
-  redis_output:
-    type: "redis"
+  # HTTP sink - 发送到 Auperator API
+  http_output:
+    type: "http"
     inputs: ["error_only_filter"]
-    endpoint: "redis://localhost:6379"
-    key: "auperator:logs:main"
-    request:
-      timeout_secs: 60
+    uri: "http://172.17.0.1:7000/vector/ingest"  # Docker 网关 IP
+    encoding:
+      codec: "json"
     batch:
-      max_events: 1
+      max_events: 10
+      timeout_secs: 5
+    request:
       timeout_secs: 10
+      retry_attempts: 3
+
+  # 控制台输出（调试用）
+  console_output:
+    type: "console"
+    inputs: ["error_only_filter"]
+    encoding:
+      codec: "json"
 ```
+
+**注意**：
+- 如果 Vector 在 Docker 中运行，使用 `172.17.0.1` 访问宿主机服务
+- 如果 Vector 在宿主机运行，使用 `127.0.0.1`
+
+## 工作流程示例
+
+### 1. 错误日志产生
+
+```
+ERROR: Connection refused to 10.0.0.1:5432
+```
+
+### 2. Vector 采集并发送
+
+```json
+{
+  "message": "ERROR: Connection refused to 10.0.0.1:5432",
+  "timestamp": "2026-03-17T14:30:00Z",
+  "container_name": "backend-1",
+  "host": "server-01"
+}
+```
+
+### 3. Drain3 提取模板
+
+```json
+{
+  "template_mined": "ERROR: Connection refused to <*:<:NUM:>>",
+  "cluster_id": 1,
+  "is_new_template": true
+}
+```
+
+### 4. 推送到 Redis
+
+```json
+{
+  "message": "ERROR: Connection refused to <*:<:NUM:>>",
+  "cluster_id": 1,
+  "timestamp": "2026-03-17T14:30:00Z"
+}
+```
+
+### 5. Agent 处理
+
+- 分析错误原因（数据库连接失败）
+- 在 Daytona 沙箱中克隆代码
+- 定位问题代码（缺少数据库配置）
+- 实施修复（添加配置文件）
+- 运行测试验证
+- 提交 PR
 
 ## 故障排查
 
-### Vector 连接 Redis 超时
+### Vector 无法连接 API
 
-如果遇到远程 Redis 连接超时，可以尝试：
+如果看到 `Connection refused` 错误：
 
-1. 增加超时时间：`request.timeout_secs: 120`
-2. 减小批量大小：`batch.max_events: 1`
-3. 检查网络连接质量
-4. 考虑使用本地 Redis + 转发
+1. 确认 API 服务已启动：`curl http://127.0.0.1:7000/health`
+2. 如果 Vector 在 Docker 中，使用 `172.17.0.1` 代替 `127.0.0.1`
+3. 检查防火墙设置
 
-### 日志没有被过滤
+### Drain3 状态丢失
 
-检查 Vector 的过滤条件，可以通过启用 `console_output` sink 调试。
+- Drain3 状态保存在 `drain3.json` 中
+- 重启 API 服务会自动加载之前学习的模板
+- 确保 `drain3.json` 文件可写
+
+### Agent 处理失败
+
+1. 检查 OpenAI API 配置
+2. 查看 Langfuse 追踪日志（如果启用）
+3. 启用详细日志：`LOG_LEVEL=DEBUG`
 
 ## 贡献指南
 
