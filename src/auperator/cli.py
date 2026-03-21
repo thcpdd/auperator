@@ -5,6 +5,7 @@ import sys
 from typing import Annotated
 
 import typer
+import uvicorn
 
 from auperator.config import settings
 from auperator.deepagents import create_auperator
@@ -38,6 +39,33 @@ def run_async(coro):
         if pending:
             loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
         loop.close()
+
+
+@app.command()
+def server(
+    host: Annotated[
+        str,
+        typer.Option("--host", "-h", help="API server host"),
+    ] = None,
+    port: Annotated[
+        int,
+        typer.Option("--port", "-p", help="API server port"),
+    ] = None,
+    reload: Annotated[
+        bool,
+        typer.Option("--reload", help="Enable auto-reload"),
+    ] = False,
+):
+    """启动 Auperator API 服务"""
+    host = host or settings.api_host
+    port = port or settings.api_port
+
+    uvicorn.run(
+        "auperator.server:app",
+        host=host,
+        port=port,
+        reload=reload
+    )
 
 
 @app.command("terminal-consume")
