@@ -11,30 +11,46 @@ transforms:
     group_by: ["container_id"]
     merge_strategies:
       message: "concat"
-    # 万能正则：匹配日期、方括号、或者常见的日志级别
-    # 只要不符合这个开头的行，都会被认为是上一行的延续（比如堆栈缩进部分）
+    # 新行判断逻辑：让HTTP访问日志能与后续的错误堆栈合并
+    # - 标准日志格式（2025-01-01、[INFO]、ERROR:等）触发新行
+    # - 缩进行（4空格开头）、堆栈跟踪（Traceback、File、at ）不触发新行，会被合并
+    # - 这样 HTTP: 172.18.0.1:38530 - "GET /api" 500 和后续的 Traceback 会合并在一起
     starts_when: |
       msg = to_string(.message) ?? ""
-      match(msg, r'^(\d{4}|\[|\d{2}:\d{2}|INFO|DEBUG|WARN|ERROR|CRITICAL)')
+
+      # 缩进行和堆栈跟踪信息不触发新行
+      is_continuation = match(msg, r'^(    |\t|at |File "|Traceback \(most|Caused by:|\[?WARNING|ERROR:|Exception:)')
+
+      # 只有在不是延续行的情况下，才检查是否有标准日志前缀
+      !is_continuation && match(msg, r'^(\d{4}-\d{2}-\d{2}|\[\d+\]|\d{2}:\d{2}:\d{2}|INFO|DEBUG|WARN|CRITICAL)')
     expire_after_ms: 1000
 
   # 2. 万能过滤逻辑：关键词+模式匹配
+  # 过滤掉纯HTTP访问日志，只保留有实际错误信息的日志
   error_only_filter:
     type: "filter"
     inputs: ["merged_logs"]
     condition: |
       # 1. 安全转换并转为小写
       msg = downcase(to_string(.message) ?? "")
-      
-      # 2. 使用 contains 检查字符串是否包含特定子串
-      # contains(string, search_for)
-      contains(msg, "error") || 
-      contains(msg, "exception") || 
-      contains(msg, "traceback") ||
-      contains(msg, "critical") ||
-      contains(msg, "fatal") ||
-      # 3. 配合正则捕获 5xx 错误
-      match(msg, r' (5\d{2}) ')
+
+      # 2. 检测是否像HTTP访问日志
+      # 格式: "IP:PORT - "METHOD PATH PROTO" STATUS"
+      # 匹配标准HTTP访问日志格式，如: 172.18.0.1:38530 - "GET /api/stats HTTP/1.1" 500
+      is_http_access = match(msg, r'\d+\.\d+\.\d+\.\d+:\d+ - "[A-Z]+ [^"]+?" \d{3}')
+
+      # 3. 如果是HTTP访问日志，必须有更严重的错误信息
+      http_has_real_error = is_http_access && match(msg, r'(traceback|exception|refused|connection|denied|timeout|error \(|caused by|failed)')
+
+      # 4. 非HTTP访问日志，只要有错误关键词即可
+      has_error_keyword = contains(msg, "error") ||
+                           contains(msg, "exception") ||
+                           contains(msg, "traceback") ||
+                           contains(msg, "critical") ||
+                           contains(msg, "fatal")
+
+      # 5. 最终判断：非HTTP访问日志 OR HTTP访问日志但有实质错误
+      (!is_http_access && has_error_keyword) || http_has_real_error
 
 sinks:
   # HTTP sink - 发送到 Auperator API 进行日志聚合
