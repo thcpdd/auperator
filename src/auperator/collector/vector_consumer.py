@@ -10,7 +10,7 @@ from typing import Any, Callable
 import redis.asyncio as redis
 
 from auperator.config import settings
-from auperator.collector.models import LogEntry, LogLevel
+from auperator.schemas.log import LogEntry, LogLevel
 
 
 class VectorRedisConsumer:

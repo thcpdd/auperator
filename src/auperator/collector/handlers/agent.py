@@ -11,7 +11,7 @@ from langchain.messages import HumanMessage
 from langfuse.langchain import CallbackHandler
 
 from auperator.config import settings
-from auperator.collector.models import LogEntry
+from auperator.schemas.log import LogEntry
 from auperator.collector.handlers.base import BaseLogHandler
 
 

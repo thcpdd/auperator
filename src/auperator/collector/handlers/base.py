@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 
-from ..models import LogEntry
+from auperator.schemas.log import LogEntry
 
 
 class BaseLogHandler(ABC):

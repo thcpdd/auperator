@@ -10,7 +10,7 @@ from auperator.config import settings
 from auperator.deepagents import create_auperator
 from auperator.deepagents.tools.docker_tools import get_tools as docker_tools
 from auperator.deepagents.tools.pull_request import get_tools as pr_tools
-from auperator.collector.models import LogEntry
+from auperator.schemas.log import LogEntry
 from auperator.collector.handlers.console import ConsoleHandler
 from auperator.collector.handlers.agent import AgentHandler
 from auperator.collector.vector_consumer import VectorRedisConsumer

@@ -3,7 +3,7 @@
 import json
 
 from .base import BaseLogHandler
-from ..models import LogEntry
+from auperator.schemas.log import LogEntry
 
 
 class ConsoleHandler(BaseLogHandler):
