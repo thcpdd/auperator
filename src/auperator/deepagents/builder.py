@@ -1,5 +1,7 @@
 """Deep Agents come with planning, filesystem, and subagents."""
 
+import os
+
 from collections.abc import Callable, Sequence
 from typing import Any
 
@@ -240,8 +242,17 @@ def create_deep_agent(  # noqa: C901, PLR0912  # Complex graph assembly logic wi
     deepagent_middleware: list[AgentMiddleware[Any, Any, Any]] = [
         TodoListMiddleware(),
     ]
-    if memory is not None:
-        deepagent_middleware.append(MemoryMiddleware(backend=backend, sources=memory))
+
+    # Resolve memory: default to AUPERATOR.md if not specified
+    resolved_memory = memory
+    if memory is None:
+        # Default to loading AUPERATOR.md if it exists
+        auperator_md_path = "./AUPERATOR.md"
+        if os.path.exists(auperator_md_path):
+            resolved_memory = [auperator_md_path]
+
+    if resolved_memory is not None:
+        deepagent_middleware.append(MemoryMiddleware(backend=backend, sources=resolved_memory))
     if skills is not None:
         deepagent_middleware.append(SkillsMiddleware(backend=backend, sources=skills))
     deepagent_middleware.extend(

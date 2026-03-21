@@ -6,6 +6,8 @@ from typing import Annotated
 
 import typer
 import uvicorn
+from langchain.messages import HumanMessage
+from langfuse.langchain import CallbackHandler
 
 from auperator.config import settings
 from auperator.deepagents import create_auperator
@@ -15,6 +17,7 @@ from auperator.schemas.log import LogEntry
 from auperator.collector.handlers.console import ConsoleHandler
 from auperator.collector.handlers.agent import AgentHandler
 from auperator.collector.vector_consumer import VectorRedisConsumer
+from auperator.deepagents.prompts.initialize import INITIALIZE_PROMPT
 
 app = typer.Typer(help="Auperator - 智能运维 Agent")
 
@@ -188,6 +191,35 @@ def list_info(
             await consumer.close()
 
     run_async(get_info())
+
+
+@app.command()
+def init():
+    """初始化项目记忆 - 分析被监控的项目并生成 AUPERATOR.md"""
+    if not settings.remote_repo_url:
+        print("❌ 错误：未配置 REMOTE_REPO_URL")
+        print("请在 .env 文件中设置 REMOTE_REPO_URL")
+        raise typer.Exit(1)
+
+    print(f"📂 目标项目: {settings.remote_repo_url}")
+    print("🔍 正在分析项目结构...\n")
+
+    langfuse_handler = CallbackHandler()
+    agent = create_auperator(skills=["./src/auperator/deepagents/skills"])
+
+    async def run():
+        try:
+            async for _ in agent.astream(
+                {"messages": [HumanMessage(INITIALIZE_PROMPT)]},
+                {"callbacks": [langfuse_handler]}
+            ):
+                pass
+            print("\n✅ AUPERATOR.md 已生成到项目根目录")
+        except Exception as e:
+            print(f"\n❌ 初始化失败: {e}", file=sys.stderr)
+            raise
+
+    run_async(run())
 
 
 def main():

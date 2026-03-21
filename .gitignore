@@ -22,3 +22,6 @@ vector.yaml
 
 # Drain3 state file
 drain3.json
+
+# Auperator explored output
+AUPERATOR.md
