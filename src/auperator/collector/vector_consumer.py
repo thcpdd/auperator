@@ -10,8 +10,7 @@ from typing import Any, Callable
 import redis.asyncio as redis
 
 from auperator.config import settings
-from auperator.collector.adapters import VectorAdapter
-from auperator.collector.models import LogEntry
+from auperator.collector.models import LogEntry, LogLevel
 
 
 class VectorRedisConsumer:
@@ -54,7 +53,6 @@ class VectorRedisConsumer:
 
         self._redis: redis.Redis | None = None
         self._running = False
-        self._adapter = VectorAdapter()
 
     async def connect(self) -> None:
         """连接 Redis"""
@@ -118,7 +116,7 @@ class VectorRedisConsumer:
     def _parse_list_data(self, data: str) -> LogEntry:
         """解析 List 数据为 LogEntry
 
-        Vector 将 JSON 字符串写入 List
+        现在Redis List中存储的是Drain3处理后的日志模板（JSON格式）
 
         Args:
             data: List 中的 JSON 字符串
@@ -127,14 +125,32 @@ class VectorRedisConsumer:
             LogEntry 对象
         """
         try:
-            # Vector 写入的是 JSON 字符串
+            # 解析JSON
             fields = json.loads(data)
-            # 转换回 JSON 字符串给 VectorAdapter
-            vector_json = json.dumps(fields)
-            return self._adapter.parse(vector_json)
-        except json.JSONDecodeError:
+
+            # 创建LogEntry对象
+            return LogEntry(
+                message=fields.get("message", ""),
+                level=LogLevel.ERROR,  # 这些都是经过过滤的错误日志
+                timestamp=fields.get("timestamp", ""),
+                source=fields.get("host", ""),  # 使用host作为source
+                metadata={
+                    "cluster_id": fields.get("cluster_id", ""),
+                    "source_type": fields.get("source_type", ""),
+                    "container_name": fields.get("container_name", ""),
+                    "host": fields.get("host", ""),
+                }
+            )
+        except json.JSONDecodeError as e:
             # 如果不是 JSON，当作原始消息处理
-            return self._adapter.parse(data)
+            logger.error(f"无法解析日志数据: {e}")
+            return LogEntry(
+                message=data,
+                level=LogLevel.ERROR,
+                timestamp="",
+                source="unknown",
+                metadata={}
+            )
 
     async def consume_batch(
         self,

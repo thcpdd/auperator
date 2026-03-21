@@ -23,7 +23,6 @@ dependencies = [
 
 [project.scripts]
 auperator = "auperator.cli:main"
-auperator-collector = "auperator.collector.cli:main"
 
 [[tool.uv.index]]
 name = "tsinghua"
