@@ -121,6 +121,7 @@ class Settings(BaseSettings):
     # Daytona 配置
     daytona_api_key: str = Field(default="", alias="DAYTONA_API_KEY")
     daytona_api_url: str = Field(default="https://app.daytona.io/api", alias="DAYTONA_API_URL")
+    daytona_sandbox_timeout: int = Field(default=3600, alias="DAYTONA_SANDBOX_TIMEOUT")
 
     # 远程仓库配置
     remote_repo_url: str = Field(default="", alias="REMOTE_REPO_URL")

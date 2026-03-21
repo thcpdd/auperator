@@ -99,7 +99,7 @@ class DaytonaService:
 
         try:
             assert self._daytona is not None
-            sandbox = await self._daytona.create()
+            sandbox = await self._daytona.create(timeout=settings.daytona_sandbox_timeout)
             logger.info(f"Sandbox created: {sandbox.id}")
 
             # Auto-configure Git authentication for GitHub
