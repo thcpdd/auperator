@@ -5,11 +5,16 @@
 
 import logging
 
+from qdrant_client import AsyncQdrantClient, models
 from redis.asyncio import Redis as AsyncRedis
 
 from auperator.config import settings
 from auperator.services.daytona_service import DaytonaService
 from auperator.services.drain3_service import Drain3Service
+from auperator.services.memory_service import (
+    DEFAULT_MEMORY_WEIGHTS,
+    MEMORY_SECTIONS
+)
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +29,8 @@ class GlobalState:
         self.redis_client: AsyncRedis | None = None
         # Drain3 服务
         self.drain3_service: Drain3Service | None = None
+        # Qdrant 客户端
+        self.qdrant_client: AsyncQdrantClient | None = None
 
     async def initialize_all(self):
         """初始化所有服务"""
@@ -31,6 +38,7 @@ class GlobalState:
         self._initialize_redis()
         self._initialize_drain3()
         await self._initialize_daytona()
+        await self._initialize_qdrant()
         logger.info("✅ All services initialized successfully")
 
     def _initialize_drain3(self):
@@ -54,11 +62,37 @@ class GlobalState:
         await self.daytona_service.__aenter__()
         logger.info("Daytona service initialized")
 
+    async def _initialize_qdrant(self):
+        """初始化 Qdrant 客户端和collection"""
+        if self.qdrant_client is None:
+            logger.info("Initializing Qdrant client...")
+            self.qdrant_client = AsyncQdrantClient(
+                url=settings.qdrant_url,
+                api_key=settings.qdrant_api_key,
+            )
+            # 初始化collection
+            if not await self.qdrant_client.collection_exists(settings.qdrant_collection):
+                await self.qdrant_client.create_collection(
+                    collection_name=settings.qdrant_collection,
+                    vectors_config={
+                        section: models.VectorParams(
+                            size=settings.embedding_vector_size,
+                            distance=models.Distance.COSINE,
+                        )
+                        for section in MEMORY_SECTIONS
+                    },
+                )
+                logger.info(f"Collection '{settings.qdrant_collection}' 已创建")
+            else:
+                logger.info(f"Collection '{settings.qdrant_collection}' 已存在")
+            logger.info("Qdrant client initialized")
+
     async def cleanup_all(self):
         """清理所有服务"""
         logger.info("Cleaning up all services...")
         await self._cleanup_redis()
         await self._cleanup_daytona()
+        await self._cleanup_qdrant()
         logger.info("✅ All services cleaned up successfully")
 
     async def _cleanup_redis(self):
@@ -74,6 +108,13 @@ class GlobalState:
             logger.info("Cleaning up Daytona service...")
             await self.daytona_service.__aexit__(None, None, None)
             self.daytona_service = None
+
+    async def _cleanup_qdrant(self):
+        """清理 Qdrant 客户端"""
+        if self.qdrant_client:
+            logger.info("Cleaning up Qdrant client...")
+            # AsyncQdrantClient会自动清理连接
+            self.qdrant_client = None
 
 
 global_state = GlobalState()

@@ -97,6 +97,12 @@ class Settings(BaseSettings):
     openai_base_url: str = Field(default="", alias="OPENAI_BASE_URL")
     openai_model: str = Field(default="", alias="OPENAI_MODEL")
 
+    # Embedding 配置
+    embedding_api_base_url: str = Field(default="https://api.openai.com/v1", alias="EMBEDDING_API_BASE_URL")
+    embedding_api_key: str = Field(default="", alias="EMBEDDING_API_KEY")
+    embedding_model: str = Field(default="text-embedding-3-small", alias="EMBEDDING_MODEL")
+    embedding_vector_size: int = Field(default=1536, alias="EMBEDDING_VECTOR_SIZE")
+
     # Redis 配置
     redis_host: str = Field(default="localhost", alias="REDIS_HOST")
     redis_port: int = Field(default=6379, alias="REDIS_PORT")
@@ -135,6 +141,11 @@ class Settings(BaseSettings):
     drain3_max_clusters: int = Field(default=1000, alias="DRAIN3_MAX_CLUSTERS")
     drain3_max_children: int = Field(default=100, alias="DRAIN3_MAX_CHILDREN")
     drain3_sim_th: float = Field(default=0.4, alias="DRAIN3_SIM_TH")
+
+    # Qdrant 配置
+    qdrant_url: str = Field(default="http://localhost:6333", alias="QDRANT_URL")
+    qdrant_api_key: str | None = Field(default=None, alias="QDRANT_API_KEY")
+    qdrant_collection: str = Field(default="auperator_memories", alias="QDRANT_COLLECTION")
 
     @field_validator("log_level")
     @classmethod

@@ -12,6 +12,7 @@ from langfuse.langchain import CallbackHandler
 from auperator.config import settings
 from auperator.deepagents import create_auperator
 from auperator.deepagents.tools.docker_tools import get_tools as docker_tools
+from auperator.deepagents.tools.memory_tools import get_tools as memory_tools
 from auperator.deepagents.tools.pull_request import get_tools as pr_tools
 from auperator.schemas.log import LogEntry
 from auperator.collector.handlers.console import ConsoleHandler
@@ -67,7 +68,8 @@ def server(
         "auperator.server:app",
         host=host,
         port=port,
-        reload=reload
+        reload=reload,
+        workers=settings.api_workers
     )
 
 
@@ -129,7 +131,7 @@ def start(
     list_name = settings.redis.add_prefix(settings.redis.list_name)
 
     # 创建 Agent
-    tools = docker_tools() + pr_tools()
+    tools = docker_tools() + pr_tools() + memory_tools()
     agent = create_auperator(
         skills=["./src/auperator/deepagents/skills"],
         tools=tools,

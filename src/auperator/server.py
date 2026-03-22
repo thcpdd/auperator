@@ -5,7 +5,7 @@ import uvicorn
 from fastapi import FastAPI
 
 from auperator.config import settings
-from auperator.routes import daytona_router, vector_router
+from auperator.routes import daytona_router, memory_router, vector_router
 from auperator.state import global_state
 
 logger = logging.getLogger(__name__)
@@ -41,6 +41,7 @@ app = FastAPI(
 
 # 注册路由
 app.include_router(daytona_router)
+app.include_router(memory_router)
 app.include_router(vector_router)
 
 
