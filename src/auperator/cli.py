@@ -1,6 +1,7 @@
 """Auperator CLI"""
 
 import asyncio
+import logging
 import sys
 from typing import Annotated
 
@@ -10,6 +11,7 @@ from langchain.messages import HumanMessage
 from langfuse.langchain import CallbackHandler
 
 from auperator.config import settings
+from auperator.utils.logging import setup_logging, get_uvicorn_log_config
 from auperator.deepagents import create_auperator
 from auperator.deepagents.tools.docker_tools import get_tools as docker_tools
 from auperator.deepagents.tools.memory_tools import get_tools as memory_tools
@@ -19,6 +21,15 @@ from auperator.collector.handlers.console import ConsoleHandler
 from auperator.collector.handlers.agent import AgentHandler
 from auperator.collector.vector_consumer import VectorRedisConsumer
 from auperator.deepagents.prompts.initialize import INITIALIZE_PROMPT
+
+# 初始化日志配置
+setup_logging(
+    level=settings.log_level,
+    log_file=settings.log_file,
+    use_colors=not settings.log_no_color,
+)
+
+logger = logging.getLogger(__name__)
 
 app = typer.Typer(help="Auperator - 智能运维 Agent")
 
@@ -31,10 +42,10 @@ def run_async(coro):
     try:
         loop.run_until_complete(coro)
     except KeyboardInterrupt:
-        print("\n操作已取消")
+        logger.warning("操作已取消")
         sys.exit(130)
     except Exception as e:
-        print(f"错误：{e}", file=sys.stderr)
+        logger.error(f"错误：{e}")
         sys.exit(1)
     finally:
         pending = asyncio.all_tasks(loop)
@@ -69,7 +80,11 @@ def server(
         host=host,
         port=port,
         reload=reload,
-        workers=settings.api_workers
+        workers=settings.api_workers,
+        log_config=get_uvicorn_log_config(
+            level=settings.log_level,
+            use_colors=not settings.log_no_color,
+        ),
     )
 
 
@@ -100,15 +115,15 @@ def terminal_consume(
     handler = ConsoleHandler(verbose=verbose)
 
     async def on_error(e: Exception, entry: LogEntry | None):
-        print(f"错误：{e}", file=sys.stderr)
+        logger.error(f"错误：{e}")
 
     async def run():
         try:
-            print(f"开始从 Redis List '{list_name}' 消费日志...")
-            print("按 Ctrl+C 停止\n")
+            logger.info(f"开始从 Redis List '{list_name}' 消费日志...")
+            logger.info("按 Ctrl+C 停止")
             await consumer.consume(handler.handle, on_error=on_error)
         except KeyboardInterrupt:
-            print("\n正在停止...")
+            logger.info("正在停止...")
         finally:
             await consumer.close()
 
@@ -151,14 +166,14 @@ def start(
 
     async def on_error(e: Exception, entry: LogEntry | None):
         """错误回调"""
-        print(f"❌ 错误：{e}", file=sys.stderr)
+        logger.error(f"❌ 错误：{e}")
 
     async def run():
-        print("✅ 系统已启动，等待日志...\n")
+        logger.info("✅ 系统已启动，等待日志...")
         try:
             await consumer.consume(handler.handle, on_error=on_error)
         except KeyboardInterrupt:
-            print("\n\n正在停止...")
+            logger.info("正在停止...")
         finally:
             await consumer.close()
 
@@ -187,8 +202,8 @@ def list_info(
         )
         try:
             info = await consumer.get_stream_info()
-            print(f"List: {info['list_name']}")
-            print(f"  消息数量：{info['length']}")
+            logger.info(f"List: {info['list_name']}")
+            logger.info(f"  消息数量：{info['length']}")
         finally:
             await consumer.close()
 
@@ -199,12 +214,12 @@ def list_info(
 def init():
     """初始化项目记忆 - 分析被监控的项目并生成 AUPERATOR.md"""
     if not settings.remote_repo_url:
-        print("❌ 错误：未配置 REMOTE_REPO_URL")
-        print("请在 .env 文件中设置 REMOTE_REPO_URL")
+        logger.error("❌ 错误：未配置 REMOTE_REPO_URL")
+        logger.error("请在 .env 文件中设置 REMOTE_REPO_URL")
         raise typer.Exit(1)
 
-    print(f"📂 目标项目: {settings.remote_repo_url}")
-    print("🔍 正在分析项目结构...\n")
+    logger.info(f"📂 目标项目: {settings.remote_repo_url}")
+    logger.info("🔍 正在分析项目结构...")
 
     langfuse_handler = CallbackHandler()
     agent = create_auperator(skills=["./src/auperator/deepagents/skills"])
@@ -216,9 +231,9 @@ def init():
                 {"callbacks": [langfuse_handler]}
             ):
                 pass
-            print("\n✅ AUPERATOR.md 已生成到项目根目录")
+            logger.info("✅ AUPERATOR.md 已生成到项目根目录")
         except Exception as e:
-            print(f"\n❌ 初始化失败: {e}", file=sys.stderr)
+            logger.error(f"❌ 初始化失败: {e}")
             raise
 
     run_async(run())

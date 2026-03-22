@@ -117,6 +117,8 @@ class Settings(BaseSettings):
 
     # 通用配置
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
+    log_file: str | None = Field(default=None, alias="LOG_FILE")
+    log_no_color: bool = Field(default=False, alias="LOG_NO_COLOR")
     environment: str = Field(default="development", alias="ENVIRONMENT")
 
     # LangFuse 配置
