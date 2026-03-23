@@ -13,9 +13,7 @@ from langfuse.langchain import CallbackHandler
 from auperator.config import settings
 from auperator.utils.logging import setup_logging, get_uvicorn_log_config
 from auperator.deepagents import create_auperator
-from auperator.deepagents.tools.docker_tools import get_tools as docker_tools
-from auperator.deepagents.tools.memory_tools import get_tools as memory_tools
-from auperator.deepagents.tools.pull_request import get_tools as pr_tools
+from auperator.deepagents.tools.registry import ToolRegistry
 from auperator.schemas.log import LogEntry
 from auperator.collector.handlers.console import ConsoleHandler
 from auperator.collector.handlers.agent import AgentHandler
@@ -146,7 +144,7 @@ def start(
     list_name = settings.redis.add_prefix(settings.redis.list_name)
 
     # 创建 Agent
-    tools = docker_tools() + pr_tools() + memory_tools()
+    tools = ToolRegistry.get_all()
     agent = create_auperator(
         skills=["./src/auperator/deepagents/skills"],
         tools=tools,
