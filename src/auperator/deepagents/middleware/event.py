@@ -20,6 +20,7 @@ from langgraph.types import Command
 
 from auperator.events import EventCenter
 from auperator.schemas.event import Event, EventType
+from auperator.utils.checkpointer import generate_thread_id
 
 logger = logging.getLogger(__name__)
 
@@ -93,9 +94,9 @@ class EventAutoSendMiddleware(AgentMiddleware[AgentState, ContextT, ResponseT]):
             # Not in a runnable context
             pass
 
-        # Fallback: generate session ID
-        generated_id = f"session_{uuid.uuid4().hex[:8]}"
-        logger.debug("No thread_id found, using generated session ID: %s", generated_id)
+        # Fallback: generate thread ID
+        generated_id = generate_thread_id()
+        logger.warning("No thread_id found, using generated thread ID: %s", generated_id)
         return generated_id
 
     def wrap_model_call(

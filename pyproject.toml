@@ -20,6 +20,7 @@ dependencies = [
     "pygithub>=2.8.1",
     "drain3>=0.9.11",
     "qdrant-client>=1.17.1",
+    "langgraph-checkpoint-sqlite>=3.0.3",
 ]
 
 [project.scripts]

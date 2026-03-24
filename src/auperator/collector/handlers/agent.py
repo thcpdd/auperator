@@ -12,7 +12,10 @@ from langfuse.langchain import CallbackHandler
 
 from auperator.config import settings
 from auperator.schemas.log import LogEntry
+from auperator.schemas.event import Event
+from auperator.events import EventCenter
 from auperator.collector.handlers.base import BaseLogHandler
+from auperator.utils.checkpointer import generate_thread_id
 
 
 logger = logging.getLogger(__name__)
@@ -28,15 +31,18 @@ class AgentHandler(BaseLogHandler):
         self,
         agent: CompiledStateGraph | None = None,
         enable_langfuse: bool = True,
+        event_center: EventCenter | None = None,
     ):
         """初始化 Agent Handler
 
         Args:
             agent: Agent实例（LangGraph CompiledStateGraph）
             enable_langfuse: 是否启用Langfuse追踪
+            event_center: 事件中心（可选）
         """
         self.agent = agent
         self.enable_langfuse = enable_langfuse
+        self.event_center = event_center  # 事件中心
 
         # Langfuse回调处理器
         self.langfuse_handler = None
@@ -59,20 +65,40 @@ class AgentHandler(BaseLogHandler):
         try:
             logger.info(f"📥 收到日志: {entry.message[:100]}")
 
+            # 生成 thread_id
+            thread_id = generate_thread_id()
+            logger.info(f"🔖 Thread ID: {thread_id}")
+
             # 调用Agent处理
             prompt = self._build_prompt(entry)
+
+            # 发布 user 事件到事件中心
+            if self.event_center:
+                try:
+                    user_event = Event.create_user_event(
+                        thread_id=thread_id,
+                        content=prompt,
+                    )
+                    await self.event_center.publish_event(user_event)
+                    logger.debug(f"✅ 已发布 user 事件: {user_event.event_id}")
+                except Exception as e:
+                    logger.warning(f"⚠️  发布 user 事件失败: {e}")
 
             # 调用Agent
             callbacks = [self.langfuse_handler] if self.langfuse_handler else None
 
+            config = {"configurable": {"thread_id": thread_id}}
+            if callbacks:
+                config["callbacks"] = callbacks
+
             async for _ in self.agent.astream(
                 {"messages": [HumanMessage(prompt)]},
-                {"callbacks": callbacks} if callbacks else {},
+                config,
                 stream_mode="updates",
                 subgraphs=True,
             ):
                 pass
-            print("Done")
+            logger.info(f"✅ Agent 处理完成")
         except Exception as e:
             logger.exception(f"❌ 处理日志时出错: {e}")
             raise  # 重新抛出异常，让 Consumer 能够感知

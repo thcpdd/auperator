@@ -9,9 +9,11 @@ import typer
 import uvicorn
 from langchain.messages import HumanMessage
 from langfuse.langchain import CallbackHandler
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 from auperator.config import settings
 from auperator.utils.logging import setup_logging, get_uvicorn_log_config
+from auperator.utils.checkpointer import generate_thread_id
 from auperator.deepagents import create_auperator
 from auperator.deepagents.tools.registry import ToolRegistry
 from auperator.schemas.log import LogEntry
@@ -19,6 +21,7 @@ from auperator.collector.handlers.console import ConsoleHandler
 from auperator.collector.handlers.agent import AgentHandler
 from auperator.collector.vector_consumer import VectorRedisConsumer
 from auperator.deepagents.prompts.initialize import INITIALIZE_PROMPT
+from auperator.events.event_center import EventCenter
 
 # 初始化日志配置
 setup_logging(
@@ -143,37 +146,44 @@ def start(
     redis_url = redis_url or settings.get_redis_url()
     list_name = settings.redis.add_prefix(settings.redis.list_name)
 
-    # 创建 Agent
-    tools = ToolRegistry.get_all()
-    agent = create_auperator(
-        skills=["./src/auperator/deepagents/skills"],
-        tools=tools,
-    )
-
-    # 创建 Agent Handler
-    handler = AgentHandler(
-        agent=agent,
-        enable_langfuse=enable_langfuse,
-    )
-
-    # 创建消费者
-    consumer = VectorRedisConsumer(
-        redis_url=redis_url,
-        list_name=list_name,
-    )
-
     async def on_error(e: Exception, entry: LogEntry | None):
         """错误回调"""
         logger.error(f"❌ 错误：{e}")
 
     async def run():
-        logger.info("✅ 系统已启动，等待日志...")
-        try:
-            await consumer.consume(handler.handle, on_error=on_error)
-        except KeyboardInterrupt:
-            logger.info("正在停止...")
-        finally:
-            await consumer.close()
+        # 创建事件中心
+        event_center = EventCenter()
+
+        async with AsyncSqliteSaver.from_conn_string(settings.sqlite_db) as checkpointer:
+            # 创建 Agent
+            tools = ToolRegistry.get_all()
+            agent = create_auperator(
+                skills=["./src/auperator/deepagents/skills"],
+                tools=tools,
+                checkpointer=checkpointer,
+            )
+
+            # 创建 Agent Handler
+            handler = AgentHandler(
+                agent=agent,
+                enable_langfuse=enable_langfuse,
+                event_center=event_center,
+            )
+
+            # 创建消费者
+            consumer = VectorRedisConsumer(
+                redis_url=redis_url,
+                list_name=list_name,
+            )
+
+            logger.info("✅ 系统已启动，等待日志...")
+            try:
+                await consumer.consume(handler.handle, on_error=on_error)
+            except KeyboardInterrupt:
+                logger.info("正在停止...")
+            finally:
+                await consumer.close()
+                await event_center.close()
 
     run_async(run())
 

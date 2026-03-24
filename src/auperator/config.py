@@ -150,6 +150,9 @@ class Settings(BaseSettings):
     qdrant_api_key: str | None = Field(default=None, alias="QDRANT_API_KEY")
     qdrant_collection: str = Field(default="auperator_memories", alias="QDRANT_COLLECTION")
 
+    # SQLite 配置
+    sqlite_db_file: str = Field(default="auperator.db.sqlite3", alias="SQLITE_DB_FILE")
+
     @field_validator("log_level")
     @classmethod
     def validate_log_level(cls, v: str) -> str:
@@ -169,6 +172,12 @@ class Settings(BaseSettings):
             self.redis_key_prefix,
             self.redis_list_name,
         )
+
+    @property
+    def sqlite_db(self):
+        """获取 SQLite 数据库配置."""
+        db_path = PROJECT_ROOT / self.sqlite_db_file
+        return str(db_path)
 
     @property
     def consumer(self):

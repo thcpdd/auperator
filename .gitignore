@@ -25,3 +25,6 @@ drain3.json
 
 # Auperator explored output
 AUPERATOR.md
+
+# Auperator database
+auperator.db.sqlite3
