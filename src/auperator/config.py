@@ -110,6 +110,7 @@ class Settings(BaseSettings):
     redis_db: int = Field(default=0, alias="REDIS_DB")
     redis_key_prefix: str = Field(default="auperator:", alias="REDIS_KEY_PREFIX")
     redis_list_name: str = Field(default="logs:main", alias="REDIS_LIST_NAME")
+    redis_event_stream: str = Field(default="events:all", alias="REDIS_EVENT_STREAM")
 
     # 消费者配置
     consumer_batch_size: int = Field(default=1, alias="CONSUMER_BATCH_SIZE")

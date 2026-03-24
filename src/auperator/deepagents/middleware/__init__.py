@@ -47,6 +47,7 @@ Use a **plain tool** when:
 * The tool is specific to a single consumer (e.g. CLI-only)
 """
 
+from .event import EventAutoSendMiddleware
 from .filesystem import FilesystemMiddleware
 from .memory import MemoryMiddleware
 from .skills import SkillsMiddleware
@@ -55,6 +56,7 @@ from .summarization import SummarizationMiddleware, SummarizationToolMiddleware
 
 __all__ = [
     "CompiledSubAgent",
+    "EventAutoSendMiddleware",
     "FilesystemMiddleware",
     "MemoryMiddleware",
     "SkillsMiddleware",

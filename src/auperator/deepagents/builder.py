@@ -22,6 +22,7 @@ from langgraph.types import Checkpointer
 from auperator.config import settings
 from .backends.local_shell import LocalShellBackend
 from .backends.protocol import BackendFactory, BackendProtocol
+from .middleware.event import EventAutoSendMiddleware
 from .middleware.filesystem import FilesystemMiddleware
 from .middleware.memory import MemoryMiddleware
 from .middleware.patch_tool_calls import PatchToolCallsMiddleware
@@ -241,6 +242,7 @@ def create_deep_agent(  # noqa: C901, PLR0912  # Complex graph assembly logic wi
     # Build main agent middleware stack
     deepagent_middleware: list[AgentMiddleware[Any, Any, Any]] = [
         TodoListMiddleware(),
+        EventAutoSendMiddleware(),
     ]
 
     # Resolve memory: default to AUPERATOR.md if not specified
