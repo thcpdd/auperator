@@ -24,7 +24,7 @@ LOG_COLORS = {
 RESET_COLOR = "\033[0m"
 
 # 全局格式字符串
-FORMAT_STR = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
+FORMAT_STR = "%(asctime)s - %(levelname)-8s - %(name)s - %(message)s"
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
@@ -99,7 +99,7 @@ def setup_logging(
         format_str = FORMAT_STR
         date_format = DATE_FORMAT
     else:
-        format_str = "%(levelname)-8s | %(name)s | %(message)s"
+        format_str = "%(levelname)-8s - %(name)s - %(message)s"
         date_format = None
 
     # 创建控制台 handler
