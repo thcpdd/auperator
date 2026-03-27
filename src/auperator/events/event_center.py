@@ -135,7 +135,7 @@ class EventCenter:
         redis = await self._get_redis()
         stream_key = settings.redis.add_prefix(settings.redis_event_stream)
 
-        logger.info(f"开始消费事件: group={group}, consumer={consumer}")
+        logger.info(f"开始监听事件: group={group}, consumer={consumer}")
 
         try:
             while True:
@@ -170,12 +170,12 @@ class EventCenter:
                         )
 
         except asyncio.CancelledError:
-            logger.info(f"消费任务被取消: group={group}, consumer={consumer}")
+            logger.info(f"监听任务被取消: group={group}, consumer={consumer}")
         except Exception as e:
-            logger.error(f"消费过程出错: group={group}, 错误: {e}")
+            logger.error(f"监听过程出错: group={group}, 错误: {e}")
             raise
         finally:
-            logger.info(f"停止消费事件: group={group}, consumer={consumer}")
+            logger.info(f"停止监听事件: group={group}, consumer={consumer}")
 
     async def get_events_by_thread_id(
         self,

@@ -3,12 +3,13 @@
 提供 FastAPI 路由的依赖注入函数
 """
 
-from fastapi import HTTPException, Depends
+from fastapi import HTTPException, Depends, status
 from qdrant_client import AsyncQdrantClient
 from redis.asyncio import Redis as AsyncRedis
 
 from auperator.services.memory_service import MemoryService
 from auperator.state import global_state
+from auperator.events import EventCenter
 
 
 def get_redis_client() -> AsyncRedis:
@@ -84,3 +85,30 @@ def get_memory_service(
         MemoryService实例
     """
     return MemoryService(qdrant_client=qdrant_client)
+
+
+def get_event_center() -> EventCenter:
+    """获取事件中心（依赖注入）
+
+    Returns:
+        EventCenter实例
+
+    Raises:
+        HTTPException: 如果事件中心未初始化
+    """
+    if global_state.event_center is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Event center not initialized"
+        )
+    return global_state.event_center
+
+
+def get_agent_worker():
+    """获取 Agent Worker 依赖"""
+    if global_state.agent_worker is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Agent worker not initialized"
+        )
+    return global_state.agent_worker

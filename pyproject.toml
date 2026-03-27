@@ -21,6 +21,7 @@ dependencies = [
     "drain3>=0.9.11",
     "qdrant-client>=1.17.1",
     "langgraph-checkpoint-sqlite>=3.0.3",
+    "sqlalchemy>=2.0.48",
 ]
 
 [project.scripts]

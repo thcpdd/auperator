@@ -15,6 +15,9 @@ from auperator.services.memory_service import (
     DEFAULT_MEMORY_WEIGHTS,
     MEMORY_SECTIONS
 )
+from auperator.events import EventCenter
+from auperator.deepagents.worker import AgentWorker
+
 
 logger = logging.getLogger(__name__)
 
@@ -31,12 +34,17 @@ class GlobalState:
         self.drain3_service: Drain3Service | None = None
         # Qdrant 客户端
         self.qdrant_client: AsyncQdrantClient | None = None
+        # 事件中心
+        self.event_center: EventCenter | None = None
+        # Agent Worker
+        self.agent_worker: AgentWorker | None = None
 
     async def initialize_all(self):
         """初始化所有服务"""
         logger.info("Initializing all services...")
         self._initialize_redis()
         self._initialize_drain3()
+        self._initialize_event_center()
         await self._initialize_daytona()
         await self._initialize_qdrant()
         logger.info("✅ All services initialized successfully")
@@ -54,6 +62,13 @@ class GlobalState:
             logger.info("Initializing Redis client...")
             self.redis_client = AsyncRedis(**settings.get_redis_connection_kwargs())
             logger.info("Redis client initialized")
+
+    def _initialize_event_center(self):
+        """初始化事件中心"""
+        if self.event_center is None:
+            logger.info("Initializing Event Center...")
+            self.event_center = EventCenter()
+            logger.info("Event Center initialized")
 
     async def _initialize_daytona(self):
         """初始化 Daytona 服务"""
@@ -91,6 +106,7 @@ class GlobalState:
         """清理所有服务"""
         logger.info("Cleaning up all services...")
         await self._cleanup_redis()
+        await self._cleanup_event_center()
         await self._cleanup_daytona()
         await self._cleanup_qdrant()
         logger.info("✅ All services cleaned up successfully")
@@ -100,6 +116,14 @@ class GlobalState:
         if self.redis_client:
             logger.info("Cleaning up Redis client...")
             await self.redis_client.aclose()
+            self.redis_client = None
+
+    async def _cleanup_event_center(self):
+        """清理事件中心"""
+        if self.event_center:
+            logger.info("Cleaning up Event Center...")
+            await self.event_center.close()
+            self.event_center = None
             self.redis_client = None
 
     async def _cleanup_daytona(self):
