@@ -10,7 +10,8 @@ from auperator.routes import (
     daytona_router,
     memory_router,
     vector_router,
-    chat_router
+    chat_router,
+    events_router
 )
 from auperator.state import global_state
 from auperator.database.db import init_db, close_db
@@ -118,6 +119,7 @@ app.include_router(daytona_router)
 app.include_router(memory_router)
 app.include_router(vector_router)
 app.include_router(chat_router)
+app.include_router(events_router)
 
 
 @app.get("/health")
