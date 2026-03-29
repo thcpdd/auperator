@@ -33,15 +33,22 @@ class EventCenter:
         Returns:
             Redis 客户端
         """
-        if self._redis is None:
-            async with self._lock:
-                if self._redis is None:
-                    self._redis = await aioredis.from_url(
-                        settings.get_redis_url(),
-                        decode_responses=False,  # 保持 bytes，方便解析
-                        encoding="utf-8",
-                    )
-                    logger.info(f"Redis 连接已建立: {settings.redis_host}:{settings.redis_port}")
+        if self._redis is not None:
+            return self._redis
+        async with self._lock:
+            if self._redis is None:
+                self._redis = await aioredis.from_url(
+                    settings.get_redis_url(),
+                    decode_responses=False,  # 保持 bytes，方便解析
+                    encoding="utf-8",
+                    # 连接池配置
+                    health_check_interval=30,  # 每 30 秒检查连接健康状态
+                    socket_keepalive=True,  # 启用 TCP keepalive
+                    socket_connect_timeout=5,  # 连接超时 5 秒
+                    socket_timeout=5,  # 读写超时 5 秒
+                    retry_on_timeout=True,  # 超时后自动重试
+                )
+                logger.info(f"Redis 连接已建立: {settings.redis_host}:{settings.redis_port}")
         return self._redis
 
     async def close(self):
