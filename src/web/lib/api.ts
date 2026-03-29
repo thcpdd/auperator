@@ -52,7 +52,7 @@ class APIClient {
     return this.request<ConversationHistory>(`/chat/conversations/${threadId}`);
   }
 
-  // SSE Events (using fetch for POST support)
+  // SSE Events (using Next.js API route to support streaming)
   connectEvents(
     threadId?: string,
     onEvent?: (data: unknown) => void,
@@ -64,7 +64,11 @@ class APIClient {
 
     const connect = async () => {
       try {
-        const response = await fetch(`${this.baseUrl}/events/web-ui`, {
+        // Use Next.js API route instead of backend directly
+        const url = `/api/events/web-ui`;
+        console.log("[SSE] Connecting to", url, "with thread_id:", threadId);
+
+        const response = await fetch(url, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -73,6 +77,8 @@ class APIClient {
           body: JSON.stringify({ thread_id: threadId || null }),
           signal: controller!.signal,
         });
+
+        console.log("[SSE] Response status:", response.status, response.statusText);
 
         if (!response.ok) {
           throw new Error(`SSE connection failed: ${response.status} ${response.statusText}`);
@@ -86,10 +92,13 @@ class APIClient {
         const decoder = new TextDecoder();
         let buffer = "";
 
+        console.log("[SSE] Starting to read stream...");
+
         while (true) {
           const { done, value } = await reader.read();
 
           if (done) {
+            console.log("[SSE] Stream completed");
             onComplete?.();
             break;
           }
@@ -105,11 +114,13 @@ class APIClient {
             if (line.startsWith("data: ")) {
               const data = line.slice(6).trim();
               if (data) {
+                console.log("[SSE] Received data:", data);
                 try {
                   const parsed = JSON.parse(data);
+                  console.log("[SSE] Parsed event:", parsed);
                   onEvent?.(parsed);
                 } catch (e) {
-                  console.error("Failed to parse SSE data:", e, "Raw data:", data);
+                  console.error("[SSE] Failed to parse SSE data:", e, "Raw data:", data);
                 }
               }
             }
@@ -118,8 +129,10 @@ class APIClient {
       } catch (error) {
         // Don't treat abort as an error (it's expected on cleanup)
         if (error instanceof Error && error.name === "AbortError") {
+          console.log("[SSE] Connection aborted");
           return;
         }
+        console.error("[SSE] Connection error:", error);
         onError?.(error as Error);
       }
     };
@@ -132,11 +145,20 @@ class APIClient {
     // Return cleanup function
     return () => {
       if (controller) {
-        controller.abort();
+        try {
+          controller.abort();
+        } catch (e) {
+          // Ignore abort errors - this is expected
+          if (e instanceof Error && e.name !== "AbortError") {
+            console.warn("[SSE] Error during cleanup:", e);
+          }
+        }
         controller = null;
       }
       if (reader) {
-        reader.cancel().catch(console.error);
+        reader.cancel().catch(() => {
+          // Ignore cancel errors
+        });
         reader = null;
       }
     };

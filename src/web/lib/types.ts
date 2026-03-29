@@ -28,11 +28,20 @@ export interface Message {
 
 export interface ConversationHistory {
   thread_id: string;
-  messages: Message[];
+  messages: BackendMessage[];
+}
+
+// Backend message format (from API)
+export interface BackendMessage {
+  type: "human" | "ai" | "system";
+  content: string;
+  tool_name?: string;
+  tool_args?: Record<string, unknown>;
+  timestamp?: string;
 }
 
 // Event Types
-export type EventType = "USER" | "AGENT";
+export type EventType = "user" | "agent";
 
 export interface UserEventData {
   message_type: string;

@@ -1,23 +1,34 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { apiClient } from "@/lib/api";
-import { Message, Event, AgentEventData, UserEventData } from "@/lib/types";
+import { Message, Event, AgentEventData, UserEventData, BackendMessage } from "@/lib/types";
 
 interface UseChatOptions {
   initialThreadId?: string;
   onEvent?: (event: Event) => void;
+  onSendingComplete?: () => void;
 }
 
-export function useChat({ initialThreadId, onEvent }: UseChatOptions = {}) {
+export function useChat({ initialThreadId, onEvent, onSendingComplete }: UseChatOptions = {}) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [threadId, setThreadId] = useState<string | undefined>(initialThreadId);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const loadedThreadIdRef = useRef<string | undefined>(undefined);
+  const onSendingCompleteRef = useRef<(() => void) | undefined>(onSendingComplete);
 
-  // Load conversation history when initialThreadId changes
+  // Update ref when callback changes
   useEffect(() => {
-    if (initialThreadId && initialThreadId !== threadId) {
+    onSendingCompleteRef.current = onSendingComplete;
+  }, [onSendingComplete]);
+
+  // Load conversation history on mount or when initialThreadId changes
+  useEffect(() => {
+    // Only load if initialThreadId is different from the last loaded one
+    if (initialThreadId && initialThreadId !== loadedThreadIdRef.current) {
+      // Mark as loading immediately to prevent duplicate calls
+      loadedThreadIdRef.current = initialThreadId;
       loadConversation(initialThreadId);
     }
   }, [initialThreadId]);
@@ -28,14 +39,29 @@ export function useChat({ initialThreadId, onEvent }: UseChatOptions = {}) {
       const history = await apiClient.getConversation(targetThreadId);
 
       // Convert backend messages to frontend format
-      const formattedMessages: Message[] = history.messages.map((msg) => ({
-        role: msg.role,
-        content: msg.content,
-        timestamp: msg.timestamp || new Date().toISOString(),
-      }));
+      const formattedMessages: Message[] = history.messages.map((msg) => {
+        // Convert backend type to frontend role
+        let role: "user" | "assistant" | "system";
+        if (msg.type === "human") {
+          role = "user";
+        } else if (msg.type === "ai") {
+          role = "assistant";
+        } else {
+          role = "system";
+        }
+
+        return {
+          role,
+          content: msg.content,
+          timestamp: msg.timestamp || new Date().toISOString(),
+          toolName: msg.tool_name,
+          toolArgs: msg.tool_args,
+        };
+      });
 
       setMessages(formattedMessages);
       setThreadId(targetThreadId);
+      loadedThreadIdRef.current = targetThreadId; // Mark as loaded
     } catch (error) {
       console.error("Failed to load conversation:", error);
     } finally {
@@ -65,6 +91,7 @@ export function useChat({ initialThreadId, onEvent }: UseChatOptions = {}) {
         // Update thread ID
         if (response.is_new || !threadId) {
           setThreadId(response.thread_id);
+          loadedThreadIdRef.current = response.thread_id;
         }
 
         // Note: Agent response will come through SSE events
@@ -78,6 +105,7 @@ export function useChat({ initialThreadId, onEvent }: UseChatOptions = {}) {
         };
         setMessages((prev) => [...prev, errorMessage]);
         setIsLoading(false);
+        onSendingCompleteRef.current?.();
       }
     },
     [threadId, isLoading]
@@ -85,18 +113,23 @@ export function useChat({ initialThreadId, onEvent }: UseChatOptions = {}) {
 
   const handleEvent = useCallback(
     (event: Event) => {
-      onEvent?.(event);
-
       // Filter events for current thread
       if (threadId && event.thread_id !== threadId) {
         return;
       }
 
       // Handle different event types
-      if (event.event_type === "AGENT") {
+      if (event.event_type === "agent") {
         const data = event.data as AgentEventData;
 
         if (data.message_type === "text" && data.content) {
+          // Check if this is a Done message
+          if (data.content === "[Done]") {
+            setIsLoading(false);
+            onSendingCompleteRef.current?.();
+            return;
+          }
+
           // Text response from agent
           const assistantMessage: Message = {
             role: "assistant",
@@ -116,6 +149,8 @@ export function useChat({ initialThreadId, onEvent }: UseChatOptions = {}) {
           };
           setMessages((prev) => [...prev, toolMessage]);
         }
+      } else if (event.event_type === "user") {
+        // Skip user events - already added by sendMessage
       }
     },
     [threadId, onEvent]
@@ -125,6 +160,7 @@ export function useChat({ initialThreadId, onEvent }: UseChatOptions = {}) {
     setMessages([]);
     setThreadId(undefined);
     setIsLoading(false);
+    loadedThreadIdRef.current = undefined;
   }, []);
 
   return {

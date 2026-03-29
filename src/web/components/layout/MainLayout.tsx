@@ -9,11 +9,18 @@ import { ReactNode } from "react";
 interface MainLayoutProps {
   children: ReactNode | ((view: ViewType) => ReactNode);
   defaultView?: ViewType;
+  onViewChange?: (view: ViewType) => void;
 }
 
-export function MainLayout({ children, defaultView = "chat" }: MainLayoutProps) {
+export function MainLayout({ children, defaultView = "chat", onViewChange }: MainLayoutProps) {
   const [currentView, setCurrentView] = useState<ViewType>(defaultView);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const handleViewChange = (view: ViewType) => {
+    setCurrentView(view);
+    setMobileMenuOpen(false);
+    onViewChange?.(view);
+  };
 
   return (
     <div className="flex h-screen flex-col overflow-hidden">
@@ -41,10 +48,7 @@ export function MainLayout({ children, defaultView = "chat" }: MainLayoutProps) 
         >
           <Sidebar
             currentView={currentView}
-            onViewChange={(view) => {
-              setCurrentView(view);
-              setMobileMenuOpen(false);
-            }}
+            onViewChange={handleViewChange}
             className="h-full"
           />
         </aside>

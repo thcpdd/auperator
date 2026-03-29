@@ -1,58 +1,84 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Send, Plus, MessageSquare, MoreHorizontal, ChevronRight, ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import { Markdown } from "@/components/ui/markdown";
 import { useChat } from "@/hooks/useChat";
 import { useSSE } from "@/hooks/useSSE";
 import { useConversations } from "@/hooks/useConversations";
-import { Message as MessageType } from "@/lib/types";
+import { Message as MessageType, Event } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 interface ChatViewProps {
   initialThreadId?: string;
+  onThreadIdChange?: (threadId: string | undefined) => void;
 }
 
-export function ChatView({ initialThreadId }: ChatViewProps) {
+export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showAllConversations, setShowAllConversations] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSending, setIsSending] = useState(false);
+  const onEventRef = useRef<(event: Event) => void>(undefined);
 
   const { conversations, isLoading: isLoadingConversations } = useConversations();
 
-  const { messages, threadId, isLoading, isLoadingHistory, sendMessage, handleEvent, clearMessages } =
+  const { messages, threadId, isLoading, isLoadingHistory, sendMessage, handleEvent, clearMessages, loadConversation } =
     useChat({
       initialThreadId,
-      onEvent: (event) => {
-        console.log("Received event:", event);
-      },
+      onSendingComplete: () => setIsSending(false),
     });
+
+  // Store the latest handleEvent in ref
+  onEventRef.current = handleEvent;
+
+  // Stable callback for SSE events - won't change on re-renders
+  const handleSSEEvent = useCallback((event: Event) => {
+    onEventRef.current?.(event);
+  }, []); // Empty dependency array - this function never changes
+
+  // Notify parent when threadId changes (but only when it's set to a real value)
+  useEffect(() => {
+    if (threadId && threadId !== initialThreadId) {
+      onThreadIdChange?.(threadId);
+    }
+  }, [threadId, initialThreadId, onThreadIdChange]);
 
   // Connect to SSE for current thread
   useSSE({
-    threadId,
-    onEvent: handleEvent,
+    threadId: threadId,
+    onEvent: handleSSEEvent,
     enabled: !!threadId,
   });
 
-  // Auto-scroll to bottom when new messages arrive
+  // Auto-scroll to bottom when new messages arrive or when history finishes loading
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages]);
+    const scrollToBottom = () => {
+      // Find the actual scrollable viewport inside ScrollArea
+      const viewport = scrollRef.current?.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement;
+      if (viewport) {
+        viewport.scrollTo({
+          top: viewport.scrollHeight,
+          behavior: 'smooth'
+        });
+      }
+    };
+
+    // Use setTimeout to ensure DOM has updated
+    setTimeout(scrollToBottom, 100);
+  }, [messages, isLoadingHistory]);
 
   const handleSend = async () => {
-    if (!input.trim() || isLoading) return;
+    if (!input.trim() || isLoading || isSending) return;
 
     const messageContent = input.trim();
     setInput("");
+    setIsSending(true); // 开始发送，显示加载状态
     await sendMessage(messageContent);
   };
 
@@ -66,6 +92,8 @@ export function ChatView({ initialThreadId }: ChatViewProps) {
   const handleNewChat = () => {
     clearMessages();
     setInput("");
+    // Notify parent to clear threadId from URL
+    onThreadIdChange?.(undefined);
   };
 
   const displayedConversations = showAllConversations
@@ -133,15 +161,19 @@ export function ChatView({ initialThreadId }: ChatViewProps) {
                 onKeyDown={handleKeyDown}
                 placeholder="输入消息... (Enter 发送, Shift+Enter 换行)"
                 className="min-h-[60px] max-h-[200px] resize-none"
-                disabled={isLoading}
+                disabled={isLoading || isSending}
               />
               <Button
                 onClick={handleSend}
-                disabled={!input.trim() || isLoading}
+                disabled={!input.trim() || isLoading || isSending}
                 size="icon"
                 className="h-[60px] w-[60px] shrink-0"
               >
-                <Send className="h-5 w-5" />
+                {isSending ? (
+                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent"></div>
+                ) : (
+                  <Send className="h-5 w-5" />
+                )}
               </Button>
             </div>
             <p className="mt-2 text-center text-xs text-muted-foreground">
@@ -196,8 +228,7 @@ export function ChatView({ initialThreadId }: ChatViewProps) {
                       key={conv.thread_id}
                       onClick={() => {
                         if (conv.thread_id !== threadId) {
-                          // Reload the page with new threadId
-                          window.location.href = `/?threadId=${conv.thread_id}`;
+                          loadConversation(conv.thread_id);
                         }
                       }}
                       className={cn(
@@ -271,51 +302,63 @@ function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.role === "user";
   const isToolCall = !!message.toolName;
 
-  return (
-    <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
-      <Card
-        className={`max-w-[80%] overflow-hidden ${
-          isUser ? "bg-primary text-primary-foreground" : "bg-muted"
-        } ${isToolCall ? "border-l-4 border-l-blue-500" : ""}`}
-      >
-        <div className="px-4 py-3">
-          {isToolCall ? (
-            <div>
-              <div className="flex items-center gap-2 text-sm font-medium">
-                🔧 工具调用
-              </div>
-              <div className="mt-1 text-xs font-mono bg-muted-foreground/10 rounded px-2 py-1">
-                {message.toolName}
-              </div>
-              {message.toolArgs && Object.keys(message.toolArgs).length > 0 && (
-                <details className="mt-2">
-                  <summary className="text-xs cursor-pointer hover:underline">
-                    参数
-                  </summary>
-                  <pre className="mt-1 text-xs overflow-auto max-h-32">
-                    {JSON.stringify(message.toolArgs, null, 2)}
-                  </pre>
-                </details>
-              )}
-            </div>
-          ) : isUser ? (
+  // User message: bubble style, right aligned
+  if (isUser) {
+    return (
+      <div className="flex justify-end">
+        <Card className="max-w-[80%] bg-primary text-primary-foreground">
+          <div className="px-4 py-3">
             <div className="text-sm whitespace-pre-wrap">{message.content}</div>
-          ) : (
-            <Markdown content={message.content} />
+            <div className="mt-2 text-xs text-primary-foreground/70">
+              {message.timestamp
+                ? new Date(message.timestamp).toLocaleTimeString()
+                : new Date().toLocaleTimeString()}
+            </div>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  // Agent message: full width, no bubble
+  return (
+    <div className="w-full">
+      {isToolCall ? (
+        <div className="border-l-4 border-l-blue-500 bg-muted/50 px-4 py-3">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            🔧 工具调用
+          </div>
+          <div className="mt-1 text-xs font-mono bg-background rounded px-2 py-1">
+            {message.toolName}
+          </div>
+          {message.toolArgs && Object.keys(message.toolArgs).length > 0 && (
+            <details className="mt-2">
+              <summary className="text-xs cursor-pointer hover:underline">
+                参数
+              </summary>
+              <pre className="mt-1 text-xs overflow-auto max-h-32 bg-background p-2 rounded">
+                {JSON.stringify(message.toolArgs, null, 2)}
+              </pre>
+            </details>
           )}
-          <div
-            className={`mt-2 text-xs ${
-              isUser
-                ? "text-primary-foreground/70"
-                : "text-muted-foreground"
-            }`}
-          >
+          <div className="mt-2 text-xs text-muted-foreground">
             {message.timestamp
               ? new Date(message.timestamp).toLocaleTimeString()
               : new Date().toLocaleTimeString()}
           </div>
         </div>
-      </Card>
+      ) : (
+        <>
+          <div className="prose prose-sm max-w-none dark:prose-invert">
+            <Markdown content={message.content} />
+          </div>
+          <div className="mt-2 text-xs text-muted-foreground">
+            {message.timestamp
+              ? new Date(message.timestamp).toLocaleTimeString()
+              : new Date().toLocaleTimeString()}
+          </div>
+        </>
+      )}
     </div>
   );
 }
