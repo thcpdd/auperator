@@ -43,7 +43,6 @@ export function useSSE({
     clearRetryTimeout();
 
     const delay = getRetryDelay(retryCountRef.current);
-    console.log(`[SSE] Scheduling reconnect in ${delay}ms (attempt ${retryCountRef.current + 1})`);
 
     retryTimeoutRef.current = setTimeout(() => {
       retryCountRef.current++;

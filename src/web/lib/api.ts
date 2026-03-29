@@ -93,7 +93,6 @@ class APIClient {
       try {
         // Use Next.js API route instead of backend directly
         const url = `/api/events/web-ui`;
-        console.log("[SSE] Connecting to", url, "with thread_id:", threadId);
 
         const response = await fetch(url, {
           method: "POST",
@@ -104,8 +103,6 @@ class APIClient {
           body: JSON.stringify({ thread_id: threadId || null }),
           signal: controller!.signal,
         });
-
-        console.log("[SSE] Response status:", response.status, response.statusText);
 
         if (!response.ok) {
           throw new Error(`SSE connection failed: ${response.status} ${response.statusText}`);
@@ -119,13 +116,10 @@ class APIClient {
         const decoder = new TextDecoder();
         let buffer = "";
 
-        console.log("[SSE] Starting to read stream...");
-
         while (true) {
           const { done, value } = await reader.read();
 
           if (done) {
-            console.log("[SSE] Stream completed");
             onComplete?.();
             break;
           }
@@ -141,10 +135,8 @@ class APIClient {
             if (line.startsWith("data: ")) {
               const data = line.slice(6).trim();
               if (data) {
-                console.log("[SSE] Received data:", data);
                 try {
                   const parsed = JSON.parse(data);
-                  console.log("[SSE] Parsed event:", parsed);
                   onEvent?.(parsed);
                 } catch (e) {
                   console.error("[SSE] Failed to parse SSE data:", e, "Raw data:", data);
