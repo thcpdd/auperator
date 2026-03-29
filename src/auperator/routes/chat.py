@@ -61,8 +61,8 @@ async def send_message(
             is_new = True
 
             # 创建会话记录
-            title = message[:10]  # 取前 10 个字符作为标题
-            if len(message) > 10:
+            title = message[:20]  # 取前 20 个字符作为标题
+            if len(message) > 20:
                 title += "..."
 
             conversation = Conversation(
