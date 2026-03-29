@@ -451,24 +451,24 @@ function MessageBubble({ message }: MessageBubbleProps) {
   // User message: bubble style, right aligned
   if (isUser) {
     return (
-      <div className="flex justify-end">
+      <div className="flex flex-col items-end gap-1 group">
         <Card className="max-w-[80%] bg-primary text-primary-foreground">
           <div className="px-4 py-3">
             <div className="text-sm whitespace-pre-wrap">{message.content}</div>
-            <div className="mt-2 text-xs text-primary-foreground/70">
-              {message.timestamp
-                ? new Date(message.timestamp).toLocaleTimeString()
-                : new Date().toLocaleTimeString()}
-            </div>
           </div>
         </Card>
+        <div className="text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity px-1">
+          {message.timestamp
+            ? new Date(message.timestamp).toLocaleTimeString()
+            : new Date().toLocaleTimeString()}
+        </div>
       </div>
     );
   }
 
   // Agent message: full width, no bubble
   return (
-    <div className="w-full">
+    <div className="flex flex-col gap-1 group">
       {isToolCall ? (
         <div className="border-l-4 border-l-blue-500 bg-muted/50 px-4 py-3">
           <div className="flex items-center gap-2 text-sm font-medium">
@@ -487,24 +487,17 @@ function MessageBubble({ message }: MessageBubbleProps) {
               </pre>
             </details>
           )}
-          <div className="mt-2 text-xs text-muted-foreground">
-            {message.timestamp
-              ? new Date(message.timestamp).toLocaleTimeString()
-              : new Date().toLocaleTimeString()}
-          </div>
         </div>
       ) : (
-        <>
-          <div className="prose prose-sm max-w-none dark:prose-invert">
-            <Markdown content={message.content} />
-          </div>
-          <div className="mt-2 text-xs text-muted-foreground">
-            {message.timestamp
-              ? new Date(message.timestamp).toLocaleTimeString()
-              : new Date().toLocaleTimeString()}
-          </div>
-        </>
+        <div className="prose prose-sm max-w-none dark:prose-invert">
+          <Markdown content={message.content} />
+        </div>
       )}
+      <div className="text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+        {message.timestamp
+          ? new Date(message.timestamp).toLocaleTimeString()
+          : new Date().toLocaleTimeString()}
+      </div>
     </div>
   );
 }
