@@ -90,12 +90,12 @@ class EventCenter:
 
         try:
             # XGROUP CREATE：创建消费者组
-            # id="0"：从 Stream 开头开始消费
+            # id="$"：从当前时间开始，不消费历史消息
             # mkstream=True：如果 Stream 不存在则创建
             await redis.xgroup_create(
                 name=stream_key,
                 groupname=group,
-                id="0",
+                id="$",
                 mkstream=True,
             )
             logger.info(f"消费者组创建成功: {group}")
@@ -174,8 +174,6 @@ class EventCenter:
         except Exception as e:
             logger.error(f"监听过程出错: group={group}, 错误: {e}")
             raise
-        finally:
-            logger.info(f"停止监听事件: group={group}, consumer={consumer}")
 
     async def get_events_by_thread_id(
         self,

@@ -41,7 +41,8 @@ async def stream_events(
                     continue
 
                 # SSE 格式: data: <json>\n\n
-                event_data = event.model_dump()
+                # mode='json' 会自动将 datetime 转换为 ISO 格式字符串
+                event_data = event.model_dump(mode='json')
                 yield f"data: {json.dumps(event_data)}\n\n"
         except Exception as e:
             logger.exception(f"❌ SSE 错误: {e}")
