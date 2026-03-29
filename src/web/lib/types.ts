@@ -18,6 +18,15 @@ export interface Conversation {
   updated_at: string;
 }
 
+export interface RenameConversationRequest {
+  thread_id: string;
+  title: string;
+}
+
+export interface DeleteConversationRequest {
+  thread_id: string;
+}
+
 export interface Message {
   role: "user" | "assistant" | "system";
   content: string;

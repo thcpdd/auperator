@@ -1,12 +1,27 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Plus, MessageSquare, MoreHorizontal, ChevronRight, ChevronLeft } from "lucide-react";
+import { Send, Plus, MessageSquare, MoreHorizontal, ChevronRight, ChevronLeft, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card } from "@/components/ui/card";
 import { Markdown } from "@/components/ui/markdown";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { useChat } from "@/hooks/useChat";
 import { useSSE } from "@/hooks/useSSE";
 import { useConversations } from "@/hooks/useConversations";
@@ -26,7 +41,16 @@ export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
   const [isSending, setIsSending] = useState(false);
   const onEventRef = useRef<(event: Event) => void>(undefined);
 
-  const { conversations, isLoading: isLoadingConversations } = useConversations();
+  // Rename dialog state
+  const [renameDialogOpen, setRenameDialogOpen] = useState(false);
+  const [renamingThreadId, setRenamingThreadId] = useState<string | undefined>();
+  const [newTitle, setNewTitle] = useState("");
+
+  // Delete dialog state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletingThreadId, setDeletingThreadId] = useState<string | undefined>();
+
+  const { conversations, isLoading: isLoadingConversations, renameConversation, deleteConversation } = useConversations();
 
   const { messages, threadId, isLoading, isLoadingHistory, sendMessage, handleEvent, clearMessages, loadConversation } =
     useChat({
@@ -94,6 +118,49 @@ export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
     setInput("");
     // Notify parent to clear threadId from URL
     onThreadIdChange?.(undefined);
+  };
+
+  const handleRenameClick = (conv: typeof conversations[0]) => {
+    setRenamingThreadId(conv.thread_id);
+    setNewTitle(conv.title);
+    setRenameDialogOpen(true);
+  };
+
+  const handleRenameConfirm = async () => {
+    if (!renamingThreadId || !newTitle.trim()) return;
+
+    try {
+      await renameConversation(renamingThreadId, newTitle.trim());
+      setRenameDialogOpen(false);
+      setNewTitle("");
+      setRenamingThreadId(undefined);
+    } catch (error) {
+      console.error("Failed to rename conversation:", error);
+      alert("重命名失败，请重试");
+    }
+  };
+
+  const handleDeleteClick = (threadId: string) => {
+    setDeletingThreadId(threadId);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deletingThreadId) return;
+
+    try {
+      await deleteConversation(deletingThreadId);
+      setDeleteDialogOpen(false);
+      setDeletingThreadId(undefined);
+
+      // If deleted conversation was the current one, clear it
+      if (deletingThreadId === threadId) {
+        handleNewChat();
+      }
+    } catch (error) {
+      console.error("Failed to delete conversation:", error);
+      alert("删除失败，请重试");
+    }
   };
 
   const displayedConversations = showAllConversations
@@ -224,27 +291,55 @@ export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
                 </div>
                 <div className="space-y-1">
                   {displayedConversations.map((conv) => (
-                    <button
+                    <div
                       key={conv.thread_id}
-                      onClick={() => {
-                        if (conv.thread_id !== threadId) {
-                          loadConversation(conv.thread_id);
-                        }
-                      }}
                       className={cn(
-                        "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors text-left",
+                        "flex items-center gap-1 rounded-lg px-3 py-2 text-sm transition-colors group",
                         threadId === conv.thread_id
                           ? "bg-accent text-accent-foreground"
                           : "text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground"
                       )}
                     >
-                      <MessageSquare className="h-4 w-4 shrink-0" />
-                      <div className="min-w-0 flex-1 truncate">
-                        <div className="truncate font-medium">
-                          {conv.title}
+                      <button
+                        onClick={() => {
+                          if (conv.thread_id !== threadId) {
+                            loadConversation(conv.thread_id);
+                          }
+                        }}
+                        className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                      >
+                        <MessageSquare className="h-4 w-4 shrink-0" />
+                        <div className="min-w-0 flex-1 truncate">
+                          <div className="truncate font-medium">
+                            {conv.title}
+                          </div>
                         </div>
-                      </div>
-                    </button>
+                      </button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleRenameClick(conv)}>
+                            <Pencil className="h-4 w-4 mr-2" />
+                            重命名
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleDeleteClick(conv.thread_id)}
+                            className="text-destructive focus:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            删除
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
                   ))}
 
                   {/* Show More/Less Button */}
@@ -290,6 +385,57 @@ export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
           <ChevronLeft className="h-4 w-4" />
         </Button>
       )}
+
+      {/* Rename Dialog */}
+      <Dialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>重命名对话</DialogTitle>
+            <DialogDescription>
+              为这个对话输入一个新的标题
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            value={newTitle}
+            onChange={(e) => setNewTitle(e.target.value)}
+            placeholder="输入新的对话标题"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                handleRenameConfirm();
+              }
+            }}
+            autoFocus
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRenameDialogOpen(false)}>
+              取消
+            </Button>
+            <Button onClick={handleRenameConfirm} disabled={!newTitle.trim()}>
+              确定
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirm Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>删除对话</DialogTitle>
+            <DialogDescription>
+              确定要删除这个对话吗？此操作无法撤销。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+              取消
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteConfirm} className="text-white hover:text-white">
+              删除
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

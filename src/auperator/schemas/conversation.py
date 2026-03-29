@@ -35,3 +35,9 @@ class SendMessageRequest(BaseModel):
 
     message: str = Field(..., description="用户消息内容")
     thread_id: str | None = Field(None, description="会话 thread_id，不提供则创建新会话")
+
+
+class RenameConversationRequest(BaseModel):
+    """重命名对话请求模型"""
+
+    title: str = Field(..., description="新标题", min_length=1, max_length=200)

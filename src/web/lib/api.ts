@@ -3,6 +3,8 @@ import {
   SendMessageResponse,
   Conversation,
   ConversationHistory,
+  RenameConversationRequest,
+  DeleteConversationRequest,
 } from "./types";
 
 // Use Next.js proxy to avoid CORS
@@ -50,6 +52,31 @@ class APIClient {
 
   async getConversation(threadId: string): Promise<ConversationHistory> {
     return this.request<ConversationHistory>(`/chat/conversations/${threadId}`);
+  }
+
+  async renameConversation(request: RenameConversationRequest): Promise<{ success: boolean }> {
+    return this.request<{ success: boolean }>(`/chat/conversations/${request.thread_id}/title`, {
+      method: "PATCH",
+      body: JSON.stringify({ title: request.title }),
+    });
+  }
+
+  async deleteConversation(request: DeleteConversationRequest): Promise<{ success: boolean }> {
+    const url = `${this.baseUrl}/chat/conversations/${request.thread_id}`;
+    const response = await fetch(url, {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`API Error: ${response.status} - ${error}`);
+    }
+
+    // 204 No Content - return success without parsing JSON
+    return { success: true };
   }
 
   // SSE Events (using Next.js API route to support streaming)

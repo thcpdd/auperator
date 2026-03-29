@@ -30,10 +30,42 @@ export function useConversations() {
     fetchConversations();
   }, [fetchConversations]);
 
+  // Rename conversation
+  const renameConversation = useCallback(async (threadId: string, title: string) => {
+    try {
+      await apiClient.renameConversation({ thread_id: threadId, title });
+      // Update local state
+      setConversations(prev =>
+        prev.map(conv =>
+          conv.thread_id === threadId ? { ...conv, title } : conv
+        )
+      );
+    } catch (err) {
+      const error = err as Error;
+      console.error("Failed to rename conversation:", error);
+      throw error;
+    }
+  }, []);
+
+  // Delete conversation
+  const deleteConversation = useCallback(async (threadId: string) => {
+    try {
+      await apiClient.deleteConversation({ thread_id: threadId });
+      // Remove from local state
+      setConversations(prev => prev.filter(conv => conv.thread_id !== threadId));
+    } catch (err) {
+      const error = err as Error;
+      console.error("Failed to delete conversation:", error);
+      throw error;
+    }
+  }, []);
+
   return {
     conversations,
     isLoading,
     error,
     refetch: fetchConversations,
+    renameConversation,
+    deleteConversation,
   };
 }

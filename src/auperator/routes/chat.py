@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from auperator.config import settings
 from auperator.database.db import get_db_session
 from auperator.database.models import Conversation
-from auperator.schemas.conversation import Conversation as ConversationSchema, SendMessageRequest
+from auperator.schemas.conversation import Conversation as ConversationSchema, SendMessageRequest, RenameConversationRequest
 from auperator.schemas.event import Event
 from auperator.dependencies import get_event_center, get_agent_worker
 from auperator.utils.checkpointer import generate_thread_id
@@ -176,4 +176,94 @@ async def get_conversation(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"查询对话详情失败: {str(e)}",
+        )
+
+
+@router.delete("/conversations/{thread_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_conversation(
+    thread_id: str,
+    db: AsyncSession = Depends(get_db_session),
+):
+    """删除对话
+
+    Args:
+        thread_id: 会话 thread_id
+        db: 数据库会话
+    """
+    try:
+        # 查询会话
+        conversation = await Conversation.get_by_thread_id(db, thread_id)
+
+        if conversation is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"对话不存在: {thread_id}",
+            )
+
+        # 删除会话
+        await db.delete(conversation)
+        await db.commit()
+
+        logger.info(f"✅ 对话已删除: {thread_id}")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"❌ 删除对话失败: {e}")
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"删除对话失败: {str(e)}",
+        )
+
+
+@router.patch("/conversations/{thread_id}/title")
+async def rename_conversation(
+    thread_id: str,
+    request: RenameConversationRequest,
+    db: AsyncSession = Depends(get_db_session),
+):
+    """重命名对话标题
+
+    Args:
+        thread_id: 会话 thread_id
+        request: 重命名请求
+        db: 数据库会话
+
+    Returns:
+        更新后的对话信息
+    """
+    try:
+        # 查询会话
+        conversation = await Conversation.get_by_thread_id(db, thread_id)
+
+        if conversation is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"对话不存在: {thread_id}",
+            )
+
+        # 更新标题
+        conversation.title = request.title
+        await db.commit()
+        await db.refresh(conversation)
+
+        logger.info(f"✅ 对话标题已更新: {thread_id} -> {request.title}")
+
+        return ConversationSchema(
+            id=conversation.id,
+            thread_id=conversation.thread_id,
+            title=conversation.title,
+            created_at=conversation.created_at,
+            updated_at=conversation.updated_at,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"❌ 重命名对话失败: {e}")
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"重命名对话失败: {str(e)}",
         )
