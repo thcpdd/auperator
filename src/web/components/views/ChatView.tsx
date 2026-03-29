@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Plus, MessageSquare, MoreHorizontal, ChevronRight, ChevronLeft, Pencil, Trash2 } from "lucide-react";
+import { Send, Plus, MessageSquare, MoreHorizontal, ChevronRight, ChevronLeft, Pencil, Trash2, Check, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Card } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Markdown } from "@/components/ui/markdown";
 import {
   DropdownMenu,
@@ -173,7 +173,7 @@ export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
       <div className="flex flex-1 flex-col">
         {/* Messages Area */}
         <ScrollArea className="flex-1 p-4 scrollbar-thin" ref={scrollRef}>
-          <div className="mx-auto max-w-3xl space-y-4 pb-4">
+          <div className="mx-auto max-w-5xl space-y-4 pb-4">
             {isLoadingHistory ? (
               <div className="flex h-full items-center justify-center">
                 <div className="text-center">
@@ -220,7 +220,7 @@ export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
 
         {/* Input Area */}
         <div className="border-t bg-background p-4">
-          <div className="mx-auto max-w-3xl">
+          <div className="mx-auto max-w-5xl">
             <div className="flex items-end gap-2">
               <Textarea
                 value={input}
@@ -470,24 +470,62 @@ function MessageBubble({ message }: MessageBubbleProps) {
   return (
     <div className="flex flex-col gap-1 group">
       {isToolCall ? (
-        <div className="border-l-4 border-l-blue-500 bg-muted/50 px-4 py-3">
-          <div className="flex items-center gap-2 text-sm font-medium">
-            🔧 工具调用
-          </div>
-          <div className="mt-1 text-xs font-mono bg-background rounded px-2 py-1">
-            {message.toolName}
-          </div>
-          {message.toolArgs && Object.keys(message.toolArgs).length > 0 && (
-            <details className="mt-2">
-              <summary className="text-xs cursor-pointer hover:underline">
-                参数
-              </summary>
-              <pre className="mt-1 text-xs overflow-auto max-h-32 bg-background p-2 rounded">
-                {JSON.stringify(message.toolArgs, null, 2)}
-              </pre>
-            </details>
-          )}
-        </div>
+        <Card className="border-blue-200 bg-blue-50/50 dark:bg-blue-950/20">
+          <CardContent className="p-4">
+            {/* Header */}
+            <div className="flex items-center gap-2 mb-3">
+              {message.isToolComplete ? (
+                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30">
+                  <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+                </div>
+              ) : (
+                <div className="flex h-6 w-6 items-center justify-center">
+                  <Loader2 className="h-4 w-4 animate-spin text-blue-600 dark:text-blue-400" />
+                </div>
+              )}
+              <div className="flex-1">
+                <div className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                  {message.isToolComplete ? "工具调用完成" : "正在执行工具"}
+                </div>
+                <code className="text-xs text-blue-700 dark:text-blue-300 font-mono">
+                  {message.toolName}
+                </code>
+              </div>
+            </div>
+
+            {/* Args */}
+            {message.toolArgs && Object.keys(message.toolArgs).length > 0 && (
+              <details className="group/args">
+                <summary className="flex items-center gap-1 text-xs font-medium text-muted-foreground cursor-pointer hover:text-foreground list-none mb-2">
+                  <ChevronRight className="h-3 w-3 transition-transform group-open/args:rotate-90" />
+                  调用参数
+                </summary>
+                <div className="ml-4 mt-1">
+                  <pre className="text-xs bg-background border rounded-md p-2 overflow-auto max-h-32">
+                    {JSON.stringify(message.toolArgs, null, 2)}
+                  </pre>
+                </div>
+              </details>
+            )}
+
+            {/* Output */}
+            {message.isToolComplete && message.toolOutput && (
+              <details className="group/output" open>
+                <summary className="flex items-center gap-1 text-xs font-medium text-muted-foreground cursor-pointer hover:text-foreground list-none mb-2">
+                  <ChevronRight className="h-3 w-3 transition-transform group-open/output:rotate-90" />
+                  执行结果
+                </summary>
+                <div className="ml-4 mt-1">
+                  <div className="bg-background border rounded-md p-3 max-h-96 overflow-auto">
+                    <pre className="text-xs whitespace-pre-wrap font-mono">
+                      {message.toolOutput}
+                    </pre>
+                  </div>
+                </div>
+              </details>
+            )}
+          </CardContent>
+        </Card>
       ) : (
         <div className="prose prose-sm max-w-none dark:prose-invert">
           <Markdown content={message.content} />

@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { apiClient } from "@/lib/api";
-import { Message, Event, AgentEventData, UserEventData, BackendMessage } from "@/lib/types";
+import { Message, Event, AgentEventData, ToolEventData } from "@/lib/types";
 
 interface UseChatOptions {
   initialThreadId?: string;
@@ -46,17 +46,30 @@ export function useChat({ initialThreadId, onEvent, onSendingComplete }: UseChat
           role = "user";
         } else if (msg.type === "ai") {
           role = "assistant";
+        } else if (msg.type === "tool") {
+          role = "assistant"; // Tool messages are from assistant
         } else {
           role = "system";
         }
 
-        return {
+        // Handle tool messages
+        const isToolMessage = msg.type === "tool" && !!msg.name;
+        const message: Message = {
           role,
           content: msg.content,
           timestamp: msg.timestamp || new Date().toISOString(),
-          toolName: msg.tool_name,
-          toolArgs: msg.tool_args,
+          toolName: msg.name,
+          toolArgs: msg.args,
         };
+
+        // For tool messages from history, set appropriate flags
+        if (isToolMessage) {
+          message.isToolComplete = true;
+          message.toolOutput = msg.content || "";
+          message.content = `🔧 工具调用: ${msg.name || "未知"}`;
+        }
+
+        return message;
       });
 
       setMessages(formattedMessages);
@@ -122,7 +135,7 @@ export function useChat({ initialThreadId, onEvent, onSendingComplete }: UseChat
       if (event.event_type === "agent") {
         const data = event.data as AgentEventData;
 
-        if (data.message_type === "text" && data.content) {
+        if (data.content) {
           // Check if this is a Done message
           if (data.content === "[Done]") {
             setIsLoading(false);
@@ -138,14 +151,40 @@ export function useChat({ initialThreadId, onEvent, onSendingComplete }: UseChat
           };
           setMessages((prev) => [...prev, assistantMessage]);
           setIsLoading(false);
-        } else if (data.message_type === "tool") {
-          // Tool call - display it
+        }
+      } else if (event.event_type === "tool") {
+        const data = event.data as ToolEventData;
+
+        // Check if this is a tool call result (has content) or initial call (no content)
+        if (data.content && data.content.trim()) {
+          // Tool result - find and update the pending tool message
+          setMessages((prev) => {
+            const updated = [...prev];
+            // Find the last message from this tool that is not complete
+            for (let i = updated.length - 1; i >= 0; i--) {
+              const msg = updated[i];
+              if (msg.toolName === data.tool && !msg.isToolComplete) {
+                // Update the message with result
+                updated[i] = {
+                  ...msg,
+                  content: `🔧 工具调用: ${data.tool || "未知"}`,
+                  toolOutput: data.content,
+                  isToolComplete: true,
+                };
+                break;
+              }
+            }
+            return updated;
+          });
+        } else {
+          // Initial tool call - add a pending message
           const toolMessage: Message = {
             role: "assistant",
-            content: `🔧 调用工具: ${data.tool || "未知"}`,
+            content: `⏳ 调用工具: ${data.tool || "未知"}...`,
             timestamp: event.timestamp,
             toolName: data.tool,
             toolArgs: data.args,
+            isToolComplete: false,
           };
           setMessages((prev) => [...prev, toolMessage]);
         }
