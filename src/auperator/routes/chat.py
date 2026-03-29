@@ -149,22 +149,57 @@ async def get_conversation(
 
         # 格式化消息
         formatted_messages = []
+        pending_tool_calls = {}  # 记录待合并的工具调用 {tool_call_id: tool_call_data}
+
         for msg in messages:
-            content = msg.content if hasattr(msg, "content") else str(msg)
+            msg_type = msg.type if hasattr(msg, "type") else msg.__class__.__name__
 
-            message_data = {
-                "type": msg.type,
-                "content": content,
-            }
+            # 处理 AIMessage
+            if msg_type == "ai":
+                content = msg.content if hasattr(msg, "content") else ""
 
-            # 如果是工具调用消息
-            if hasattr(msg, "tool_calls") and msg.tool_calls:
-                for tool_call in msg.tool_calls:
-                    if tool_call.get("name"):
-                        message_data["tool_name"] = tool_call["name"]
-                        message_data["tool_args"] = tool_call.get("args")
+                # 如果有 content，先添加 AI 文本消息
+                if content:
+                    formatted_messages.append({
+                        "type": "ai",
+                        "content": content,
+                    })
 
-            formatted_messages.append(message_data)
+                # 如果有工具调用，记录下来等待 ToolMessage
+                if hasattr(msg, "tool_calls") and msg.tool_calls:
+                    for tool_call in msg.tool_calls:
+                        tool_call_id = tool_call.get("id")
+                        if tool_call_id:
+                            pending_tool_calls[tool_call_id] = {
+                                "type": "tool",
+                                "name": tool_call.get("name"),
+                                "args": tool_call.get("args", {}),
+                            }
+
+            # 处理 ToolMessage（工具调用结果）
+            elif msg_type == "tool":
+                tool_call_id = getattr(msg, "tool_call_id", None)
+                if tool_call_id and tool_call_id in pending_tool_calls:
+                    # 合并工具调用和结果
+                    tool_data = pending_tool_calls.pop(tool_call_id)
+                    tool_data["content"] = msg.content if hasattr(msg, "content") else str(msg)
+                    formatted_messages.append(tool_data)
+
+            # 处理 HumanMessage
+            elif msg_type == "human":
+                content = msg.content if hasattr(msg, "content") else str(msg)
+                formatted_messages.append({
+                    "type": "human",
+                    "content": content,
+                })
+
+            # 其他类型消息
+            else:
+                content = msg.content if hasattr(msg, "content") else str(msg)
+                formatted_messages.append({
+                    "type": msg_type,
+                    "content": content,
+                })
 
         return {
             "thread_id": thread_id,

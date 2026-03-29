@@ -210,20 +210,39 @@ class EventAutoSendMiddleware(AgentMiddleware[AgentState, ContextT, ResponseT]):
         tool_name = request.tool_call.get("name", "")
         tool_args = request.tool_call.get("args", {})
 
-        # Send tool call event
+        # Send tool call event (before execution)
         try:
-            event = Event.create_agent_event(
+            event = Event.create_tool_event(
                 thread_id=thread_id,
                 tool=tool_name,
                 args=tool_args,
+                content="",  # 工具调用前，content 为空
             )
             await self.event_center.publish_event(event)
             logger.debug(f"Sent tool call event: {tool_name}")
         except Exception as e:
             logger.error(f"Error capturing tool call: {e}")
 
-        # Call the handler
-        return await handler(request)
+        # Call the handler and capture result
+        result = await handler(request)
+
+        # Send tool result event (after execution)
+        try:
+            if isinstance(result, ToolMessage):
+                # Extract content from ToolMessage
+                content = result.content
+                tool_result_event = Event.create_tool_event(
+                    thread_id=thread_id,
+                    tool=tool_name,
+                    args=tool_args,
+                    content=content  # 工具执行结果
+                )
+                await self.event_center.publish_event(tool_result_event)
+                logger.debug(f"Sent tool result event: {tool_name}")
+        except Exception as e:
+            logger.error(f"Error capturing tool result: {e}")
+
+        return result
 
     def _extract_text_content(self, message: AIMessage) -> str:
         """Extract text content from an AIMessage.

@@ -14,6 +14,7 @@ class EventType(str, Enum):
 
     USER = "user"
     AGENT = "agent"
+    TOOL = "tool"
 
 
 class UserEventData(BaseModel):
@@ -123,6 +124,39 @@ class Event(BaseModel):
             event_type=EventType.AGENT,
             thread_id=thread_id,
             data=data
+        )
+
+    @classmethod
+    def create_tool_event(
+        cls,
+        thread_id: str,
+        tool: str,
+        args: dict[str, Any],
+        content: str,
+        **kwargs
+    ) -> "Event":
+        """创建工具调用事件.
+
+        Args:
+            thread_id: 会话标识
+            tool: 工具名称
+            args: 工具参数
+            content: 工具执行结果
+            **kwargs: 其他字段
+
+        Returns:
+            Event 实例
+        """
+        return cls(
+            event_type=EventType.TOOL,
+            thread_id=thread_id,
+            data={
+                "message_type": "tool",
+                "content": content,
+                "tool": tool,
+                "args": args,
+                **kwargs
+            }
         )
 
     def to_redis_dict(self) -> dict[str, str]:
