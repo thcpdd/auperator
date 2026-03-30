@@ -68,4 +68,4 @@ class Drain3Service:
         Returns:
             是否为新模板或模板变化
         """
-        return change_type in ["cluster_created", "cluster_template_changed"]
+        return change_type == "cluster_created"
