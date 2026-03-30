@@ -50,12 +50,24 @@ export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingThreadId, setDeletingThreadId] = useState<string | undefined>();
 
-  const { conversations, isLoading: isLoadingConversations, renameConversation, deleteConversation } = useConversations();
+  const { conversations, isLoading: isLoadingConversations, renameConversation, deleteConversation, addConversation } = useConversations();
+
+  // Handle new conversation creation
+  const handleNewConversation = useCallback((threadId: string, title: string) => {
+    const now = new Date().toISOString();
+    addConversation({
+      thread_id: threadId,
+      title,
+      created_at: now,
+      updated_at: now,
+    });
+  }, [addConversation]);
 
   const { messages, threadId, isLoading, isLoadingHistory, sendMessage, handleEvent, clearMessages, loadConversation } =
     useChat({
       initialThreadId,
       onSendingComplete: () => setIsSending(false),
+      onNewConversation: handleNewConversation,
     });
 
   // Store the latest handleEvent in ref

@@ -8,9 +8,10 @@ interface UseChatOptions {
   initialThreadId?: string;
   onEvent?: (event: Event) => void;
   onSendingComplete?: () => void;
+  onNewConversation?: (threadId: string, title: string) => void;
 }
 
-export function useChat({ initialThreadId, onEvent, onSendingComplete }: UseChatOptions = {}) {
+export function useChat({ initialThreadId, onEvent, onSendingComplete, onNewConversation }: UseChatOptions = {}) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [threadId, setThreadId] = useState<string | undefined>(initialThreadId);
   const [isLoading, setIsLoading] = useState(false);
@@ -105,6 +106,11 @@ export function useChat({ initialThreadId, onEvent, onSendingComplete }: UseChat
         if (response.is_new || !threadId) {
           setThreadId(response.thread_id);
           loadedThreadIdRef.current = response.thread_id;
+
+          // Notify parent component about new conversation
+          if (response.is_new && onNewConversation) {
+            onNewConversation(response.thread_id, response.title || "新对话");
+          }
         }
 
         // Note: Agent response will come through SSE events

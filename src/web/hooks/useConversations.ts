@@ -60,6 +60,19 @@ export function useConversations() {
     }
   }, []);
 
+  // Add new conversation
+  const addConversation = useCallback((conversation: Conversation) => {
+    setConversations(prev => {
+      // Check if conversation already exists
+      const exists = prev.some(conv => conv.thread_id === conversation.thread_id);
+      if (exists) {
+        return prev;
+      }
+      // Add new conversation to the beginning
+      return [conversation, ...prev];
+    });
+  }, []);
+
   return {
     conversations,
     isLoading,
@@ -67,5 +80,6 @@ export function useConversations() {
     refetch: fetchConversations,
     renameConversation,
     deleteConversation,
+    addConversation,
   };
 }
