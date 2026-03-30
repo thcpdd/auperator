@@ -163,9 +163,11 @@ export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
     }
   };
 
-  const displayedConversations = showAllConversations
+  // Show all conversations if less than 15, otherwise paginate
+  const shouldPaginate = conversations.length > 15;
+  const displayedConversations = showAllConversations || !shouldPaginate
     ? conversations
-    : conversations.slice(0, 5);
+    : conversations.slice(0, 15);
 
   return (
     <div className="flex h-full relative">
@@ -294,7 +296,7 @@ export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
                     <div
                       key={conv.thread_id}
                       className={cn(
-                        "flex items-center gap-1 rounded-lg px-3 py-2 text-sm transition-colors group",
+                        "flex items-center gap-1 rounded-lg px-3 py-2 text-sm transition-colors group relative",
                         threadId === conv.thread_id
                           ? "bg-accent text-accent-foreground"
                           : "text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground"
@@ -306,44 +308,45 @@ export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
                             loadConversation(conv.thread_id);
                           }
                         }}
-                        className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                        className="flex min-w-0 items-center gap-2 text-left"
+                        style={{ maxWidth: "calc(100% - 36px)" }}
                       >
                         <MessageSquare className="h-4 w-4 shrink-0" />
-                        <div className="min-w-0 flex-1 truncate">
-                          <div className="truncate font-medium">
-                            {conv.title}
-                          </div>
-                        </div>
+                        <span className="min-w-0 flex-1 truncate font-medium">
+                          {conv.title}
+                        </span>
                       </button>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => handleRenameClick(conv)}>
-                            <Pencil className="h-4 w-4 mr-2" />
-                            重命名
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => handleDeleteClick(conv.thread_id)}
-                            className="text-destructive focus:text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            删除
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleRenameClick(conv)}>
+                              <Pencil className="h-4 w-4 mr-2" />
+                              重命名
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => handleDeleteClick(conv.thread_id)}
+                              className="text-destructive focus:text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              删除
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     </div>
                   ))}
 
                   {/* Show More/Less Button */}
-                  {conversations.length > 5 && (
+                  {shouldPaginate && (
                     <button
                       onClick={() => setShowAllConversations(!showAllConversations)}
                       className="flex w-full items-center justify-center gap-1 px-3 py-1.5 text-xs text-muted-foreground hover:text-accent-foreground"
