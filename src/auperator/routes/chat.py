@@ -13,7 +13,6 @@ from auperator.database.models import Conversation
 from auperator.schemas.conversation import Conversation as ConversationSchema, SendMessageRequest, RenameConversationRequest
 from auperator.schemas.event import Event
 from auperator.dependencies import get_event_center, get_agent_worker
-from auperator.utils.checkpointer import generate_thread_id
 from auperator.state import global_state
 from auperator.events import EventCenter
 from auperator.deepagents import AgentWorker
@@ -44,33 +43,17 @@ async def send_message(
     thread_id = request.thread_id
 
     try:
-        # 确定使用哪个 thread_id
-        if thread_id:
-            # 继续对话
-            is_new = False
+        # 生成对话标题（取前 20 个字符）
+        title = message[:20]
+        if len(message) > 20:
+            title += "..."
 
-            # 查询会话
-            conversation = await Conversation.get_by_thread_id(db, thread_id)
-            if conversation:
-                # 触发 updated_at 更新（通过修改属性）
-                conversation.updated_at = func.now()
-                await db.commit()
-        else:
-            # 新对话
-            thread_id = generate_thread_id()
-            is_new = True
-
-            # 创建会话记录
-            title = message[:20]  # 取前 20 个字符作为标题
-            if len(message) > 20:
-                title += "..."
-
-            conversation = Conversation(
-                thread_id=thread_id,
-                title=title,
-            )
-            db.add(conversation)
-            await db.commit()
+        # 统一的对话管理逻辑
+        thread_id, is_new = await Conversation.get_or_create(
+            session=db,
+            thread_id=thread_id,
+            title=title,
+        )
 
         logger.info(f"📤 发送消息: thread_id={thread_id}, is_new={is_new}")
 
@@ -87,6 +70,7 @@ async def send_message(
             "thread_id": thread_id,
             "is_new": is_new,
             "status": "processing",
+            "title": title
         }
 
     except Exception as e:

@@ -1,4 +1,4 @@
-"""Agent Handler
+"""Event Handler
 
 处理日志并发布事件
 """
@@ -9,7 +9,8 @@ from auperator.schemas.log import LogEntry
 from auperator.schemas.event import Event
 from auperator.events import EventCenter
 from auperator.collector.handlers.base import BaseLogHandler
-from auperator.utils.checkpointer import generate_thread_id
+from auperator.database.db import get_db
+from auperator.database.models import Conversation
 
 
 logger = logging.getLogger(__name__)
@@ -18,7 +19,7 @@ logger = logging.getLogger(__name__)
 class EventHandler(BaseLogHandler):
     """Event 日志处理器
 
-    接收日志并发布 USER 事件到事件中心
+    接收日志并发布 USER 事件到事件中心，并在数据库中创建对话记录
     """
 
     def __init__(self, event_center: EventCenter):
@@ -38,12 +39,27 @@ class EventHandler(BaseLogHandler):
         try:
             logger.info(f"📥 收到日志: {entry.message[:100]}")
 
-            # 生成 thread_id
-            thread_id = generate_thread_id()
-            logger.info(f"🔖 Thread ID: {thread_id}")
-
             # 构建消息内容
             prompt = self._build_prompt(entry)
+
+            # 生成对话标题
+            if len(entry.message) <= 20:
+                title = f"错误日志: {entry.message}"
+            else:
+                title = f"错误日志: {entry.message[:20]}..."
+
+            # 在数据库中创建对话记录
+            db = get_db()
+            db_session = db.get_session()
+            try:
+                thread_id, is_new = await Conversation.get_or_create(
+                    session=db_session,
+                    thread_id=None,  # 每次错误日志都是新对话
+                    title=title,
+                )
+                logger.info(f"🔖 Thread ID: {thread_id}, is_new: {is_new}")
+            finally:
+                await db_session.close()
 
             # 发布 user 事件到事件中心
             user_event = Event.create_user_event(
