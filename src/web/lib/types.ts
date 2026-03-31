@@ -8,6 +8,7 @@ export interface SendMessageResponse {
   thread_id: string;
   is_new: boolean;
   status: string;
+  title?: string;
 }
 
 export interface Conversation {

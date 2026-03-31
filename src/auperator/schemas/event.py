@@ -15,6 +15,7 @@ class EventType(str, Enum):
     USER = "user"
     AGENT = "agent"
     TOOL = "tool"
+    STOP = "stop"
 
 
 class UserEventData(BaseModel):
@@ -158,6 +159,32 @@ class Event(BaseModel):
                 "content": content,
                 "tool": tool,
                 "args": args,
+                **kwargs
+            }
+        )
+
+    @classmethod
+    def create_stop_event(
+        cls,
+        thread_id: str,
+        reason: str = "user_requested",
+        **kwargs
+    ) -> "Event":
+        """创建停止事件.
+
+        Args:
+            thread_id: 会话标识
+            reason: 停止原因（user_requested, timeout, error 等）
+            **kwargs: 其他字段
+
+        Returns:
+            Event 实例
+        """
+        return cls(
+            event_type=EventType.STOP,
+            thread_id=thread_id,
+            data={
+                "reason": reason,
                 **kwargs
             }
         )

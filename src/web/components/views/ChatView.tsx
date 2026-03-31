@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Plus, MessageSquare, MoreHorizontal, ChevronRight, ChevronLeft, Pencil, Trash2, Check, Loader2 } from "lucide-react";
+import { Send, Plus, MessageSquare, MoreHorizontal, ChevronRight, ChevronLeft, Pencil, Trash2, Check, Loader2, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -27,6 +27,7 @@ import { useSSE } from "@/hooks/useSSE";
 import { useConversations } from "@/hooks/useConversations";
 import { Message as MessageType, Event } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { apiClient } from "@/lib/api";
 
 interface ChatViewProps {
   initialThreadId?: string;
@@ -63,7 +64,7 @@ export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
     });
   }, [addConversation]);
 
-  const { messages, threadId, isLoading, isLoadingHistory, sendMessage, handleEvent, clearMessages, loadConversation } =
+  const { messages, threadId, isLoading, isLoadingHistory, sendMessage, handleEvent, clearMessages, loadConversation, stopGenerating } =
     useChat({
       initialThreadId,
       onSendingComplete: () => setIsSending(false),
@@ -130,6 +131,20 @@ export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
     setInput("");
     // Notify parent to clear threadId from URL
     onThreadIdChange?.(undefined);
+  };
+
+  const handleStop = async () => {
+    if (!threadId) return;
+
+    try {
+      await apiClient.stopConversation(threadId);
+    } catch (error) {
+      console.error("Failed to stop conversation:", error);
+    } finally {
+      // Always stop loading state, even if API call fails
+      stopGenerating();
+      setIsSending(false);
+    }
   };
 
   const handleRenameClick = (conv: typeof conversations[0]) => {
@@ -240,20 +255,30 @@ export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
                 onKeyDown={handleKeyDown}
                 placeholder="输入消息... (Enter 发送, Shift+Enter 换行)"
                 className="min-h-[60px] max-h-[200px] resize-none"
-                disabled={isLoading || isSending}
+                disabled={isLoading}
               />
-              <Button
-                onClick={handleSend}
-                disabled={!input.trim() || isLoading || isSending}
-                size="icon"
-                className="h-[60px] w-[60px] shrink-0"
-              >
-                {isSending ? (
-                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent"></div>
-                ) : (
-                  <Send className="h-5 w-5" />
-                )}
-              </Button>
+              {isLoading ? (
+                <Button
+                  onClick={handleStop}
+                  size="icon"
+                  className="h-[60px] w-[60px] shrink-0 bg-destructive hover:bg-destructive/90"
+                >
+                  <Square className="h-5 w-5" />
+                </Button>
+              ) : (
+                <Button
+                  onClick={handleSend}
+                  disabled={!input.trim()}
+                  size="icon"
+                  className="h-[60px] w-[60px] shrink-0"
+                >
+                  {isSending ? (
+                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent"></div>
+                  ) : (
+                    <Send className="h-5 w-5" />
+                  )}
+                </Button>
+              )}
             </div>
             <p className="mt-2 text-center text-xs text-muted-foreground">
               Agent 可以访问系统日志、容器状态和自动化工具来帮助解决问题

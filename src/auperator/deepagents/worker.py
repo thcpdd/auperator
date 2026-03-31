@@ -52,6 +52,11 @@ class AgentWorker:
         self.langfuse_handler: CallbackHandler | None = None
         self._conn: aiosqlite.Connection | None = None
 
+        # 任务管理：thread_id -> asyncio.Task
+        self.running_tasks: dict[str, asyncio.Task] = {}
+        # 字典访问锁
+        self._lock = asyncio.Lock()
+
         # Langfuse 回调处理器
         if self.enable_langfuse and all([
             settings.langfuse_public_key,
@@ -153,17 +158,23 @@ class AgentWorker:
         try:
             # 开始消费事件
             async for event in self.event_center.consume(self.consumer_group):
-                # 只处理 USER 事件
-                if event.event_type != EventType.USER:
-                    continue
-                await self._handle_event(event)
+                # 处理不同类型的事件
+                if event.event_type == EventType.USER:
+                    # 创建后台任务并记录
+                    task = asyncio.create_task(self._handle_user_event(event))
+
+                    async with self._lock:
+                        self.running_tasks[event.thread_id] = task
+
+                elif event.event_type == EventType.STOP:
+                    await self._handle_stop_event(event)
         except asyncio.CancelledError:
             logger.info("Agent Worker 已取消")
         except Exception as e:
             logger.exception(f"❌ Agent Worker 出错: {e}")
 
-    async def _handle_event(self, event: Event):
-        """处理单个事件
+    async def _handle_user_event(self, event: Event):
+        """处理 USER 事件
 
         Args:
             event: 事件对象
@@ -171,6 +182,43 @@ class AgentWorker:
         thread_id = event.thread_id
         logger.info(f"📨 收到 user 事件: {thread_id}")
 
+        try:
+            # 创建并启动 agent 任务
+            await self._run_agent(thread_id, event.data["content"])
+        except asyncio.CancelledError:
+            logger.info(f"⏹️ 任务被取消: {thread_id}")
+        finally:
+            # 清理任务记录
+            async with self._lock:
+                self.running_tasks.pop(thread_id, None)
+                logger.debug(f"🧹 任务已清理: {thread_id}")
+
+    async def _handle_stop_event(self, event: Event):
+        """处理 STOP 事件
+
+        Args:
+            event: 事件对象
+        """
+        thread_id = event.thread_id
+        reason = event.data.get("reason", "unknown")
+        logger.info(f"🛑 收到停止事件: {thread_id}, 原因: {reason}")
+
+        async with self._lock:
+            # 取消正在运行的任务
+            if thread_id in self.running_tasks:
+                task = self.running_tasks[thread_id]
+                task.cancel()
+                logger.info(f"✅ 任务已取消: {thread_id}")
+            else:
+                logger.warning(f"⚠️ 未找到运行中的任务: {thread_id}")
+
+    async def _run_agent(self, thread_id: str, content: str):
+        """运行 Agent
+
+        Args:
+            thread_id: 会话 ID
+            content: 用户消息内容
+        """
         try:
             # 构建配置
             config = {
@@ -181,11 +229,12 @@ class AgentWorker:
 
             # 执行 Agent
             await self.agent.ainvoke(
-                {"messages": [HumanMessage(event.data["content"])]},
+                {"messages": [HumanMessage(content)]},
                 config,
                 subgraphs=True
             )
-            logger.info(f"✅ Agent 执行完成: {thread_id}")
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             logger.exception(f"❌ Agent 执行失败: {thread_id}, 错误: {e}")
         finally:

@@ -79,6 +79,13 @@ class APIClient {
     return { success: true };
   }
 
+  async stopConversation(threadId: string): Promise<{ success: boolean }> {
+    return this.request<{ success: boolean }>("/chat/stop", {
+      method: "POST",
+      body: JSON.stringify({ thread_id: threadId }),
+    });
+  }
+
   // SSE Events (using Next.js API route to support streaming)
   connectEvents(
     threadId?: string,

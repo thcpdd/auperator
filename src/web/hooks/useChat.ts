@@ -18,6 +18,7 @@ export function useChat({ initialThreadId, onEvent, onSendingComplete, onNewConv
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const loadedThreadIdRef = useRef<string | undefined>(undefined);
   const onSendingCompleteRef = useRef<(() => void) | undefined>(onSendingComplete);
+  const hasClearedSendingRef = useRef(false);
 
   // Update ref when callback changes
   useEffect(() => {
@@ -87,6 +88,9 @@ export function useChat({ initialThreadId, onEvent, onSendingComplete, onNewConv
     async (content: string) => {
       if (!content.trim() || isLoading) return;
 
+      // Reset sending complete flag for new message
+      hasClearedSendingRef.current = false;
+
       // Add user message immediately
       const userMessage: Message = {
         role: "user",
@@ -149,17 +153,28 @@ export function useChat({ initialThreadId, onEvent, onSendingComplete, onNewConv
             return;
           }
 
-          // Text response from agent
+          // First agent response - clear sending state (only once)
+          if (!hasClearedSendingRef.current) {
+            hasClearedSendingRef.current = true;
+            onSendingCompleteRef.current?.();
+          }
+
+          // Text response from agent - keep loading true until Done
           const assistantMessage: Message = {
             role: "assistant",
             content: data.content,
             timestamp: event.timestamp,
           };
           setMessages((prev) => [...prev, assistantMessage]);
-          setIsLoading(false);
         }
       } else if (event.event_type === "tool") {
         const data = event.data as ToolEventData;
+
+        // First tool call - clear sending state (only once)
+        if (!hasClearedSendingRef.current) {
+          hasClearedSendingRef.current = true;
+          onSendingCompleteRef.current?.();
+        }
 
         // Check if this is a tool call result (has content) or initial call (no content)
         if (data.content && data.content.trim()) {
@@ -206,6 +221,11 @@ export function useChat({ initialThreadId, onEvent, onSendingComplete, onNewConv
     loadedThreadIdRef.current = undefined;
   }, []);
 
+  const stopGenerating = useCallback(() => {
+    setIsLoading(false);
+    onSendingCompleteRef.current?.();
+  }, []);
+
   return {
     messages,
     threadId,
@@ -215,5 +235,6 @@ export function useChat({ initialThreadId, onEvent, onSendingComplete, onNewConv
     handleEvent,
     clearMessages,
     loadConversation,
+    stopGenerating,
   };
 }

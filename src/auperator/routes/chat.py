@@ -5,7 +5,7 @@ from typing import List
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Body
 
 from auperator.config import settings
 from auperator.database.db import get_db_session
@@ -285,4 +285,42 @@ async def rename_conversation(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"重命名对话失败: {str(e)}",
+        )
+
+
+@router.post("/stop", status_code=status.HTTP_200_OK)
+async def stop_conversation(
+    thread_id: str = Body(..., description="要停止的对话 ID", embed=True),
+    event_center: EventCenter = Depends(get_event_center)
+):
+    """停止正在运行的对话
+
+    Args:
+        thread_id: 要停止的对话 thread_id
+        event_center: 事件中心
+
+    Returns:
+        dict: 停止确认
+    """
+    try:
+        # 发布停止事件
+        stop_event = Event.create_stop_event(
+            thread_id=thread_id,
+            reason="user_requested"
+        )
+        await event_center.publish_event(stop_event)
+
+        logger.info(f"🛑 发送停止事件: {thread_id}")
+
+        return {
+            "status": "stopping",
+            "thread_id": thread_id,
+            "message": "停止信号已发送"
+        }
+
+    except Exception as e:
+        logger.exception(f"❌ 停止对话失败: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"停止对话失败: {str(e)}",
         )
