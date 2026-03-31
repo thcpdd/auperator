@@ -42,6 +42,16 @@ export function Markdown({ content, className }: MarkdownProps) {
           margin-top: 0.25em;
           margin-bottom: 0.25em;
         }
+        /* Link styles */
+        .prose a {
+          color: oklch(0.65 0.18 255) !important;
+          text-decoration-color: oklch(0.65 0.18 255 / 0.3) !important;
+          transition: all 0.2s ease !important;
+        }
+        .prose a:hover {
+          color: oklch(0.6 0.18 255) !important;
+          text-decoration-color: oklch(0.65 0.18 255) !important;
+        }
         /* Table styles with borders - using !important to override prose defaults */
         .prose table {
           border-collapse: collapse !important;
