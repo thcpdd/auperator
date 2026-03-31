@@ -191,10 +191,10 @@ export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
             {isLoadingHistory ? (
               <div className="flex h-full items-center justify-center">
                 <div className="text-center">
-                  <div className="flex gap-1 justify-center mb-4">
-                    <div className="h-2 w-2 animate-bounce rounded-full bg-foreground/50" />
-                    <div className="h-2 w-2 animate-bounce rounded-full bg-foreground/50 [animation-delay:-0.2s]" />
-                    <div className="h-2 w-2 animate-bounce rounded-full bg-foreground/50 [animation-delay:-0.4s]" />
+                  <div className="flex gap-1.5 justify-center mb-4">
+                    <div className="h-2.5 w-2.5 animate-pulse rounded-full bg-primary" />
+                    <div className="h-2.5 w-2.5 animate-pulse rounded-full bg-primary [animation-delay:0.2s]" />
+                    <div className="h-2.5 w-2.5 animate-pulse rounded-full bg-primary [animation-delay:0.4s]" />
                   </div>
                   <p className="text-sm text-muted-foreground">加载会话历史...</p>
                 </div>
@@ -217,16 +217,14 @@ export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
             )}
             {isLoading && (
               <div className="flex justify-start">
-                <Card className="max-w-[80%] px-4 py-3 bg-muted">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <div className="flex gap-1">
-                      <div className="h-2 w-2 animate-bounce rounded-full bg-foreground/50" />
-                      <div className="h-2 w-2 animate-bounce rounded-full bg-foreground/50 [animation-delay:-0.2s]" />
-                      <div className="h-2 w-2 animate-bounce rounded-full bg-foreground/50 [animation-delay:-0.4s]" />
-                    </div>
-                    <span>Agent 正在思考...</span>
+                <div className="flex items-center gap-3 px-4 py-3">
+                  <div className="flex gap-1.5">
+                    <div className="h-2 w-2 animate-pulse rounded-full bg-primary" />
+                    <div className="h-2 w-2 animate-pulse rounded-full bg-primary [animation-delay:0.2s]" />
+                    <div className="h-2 w-2 animate-pulse rounded-full bg-primary [animation-delay:0.4s]" />
                   </div>
-                </Card>
+                  <span className="text-sm text-muted-foreground">Auperator 正在思考...</span>
+                </div>
               </div>
             )}
           </div>
