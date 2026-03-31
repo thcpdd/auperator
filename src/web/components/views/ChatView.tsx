@@ -466,24 +466,19 @@ function MessageBubble({ message }: MessageBubbleProps) {
   // User message: bubble style, right aligned
   if (isUser) {
     return (
-      <div className="flex flex-col items-end gap-1 group">
+      <div className="flex flex-col items-end gap-1">
         <Card className="max-w-[80%] bg-primary text-primary-foreground">
           <div className="px-4 py-3">
             <div className="text-sm whitespace-pre-wrap">{message.content}</div>
           </div>
         </Card>
-        <div className="text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity px-1">
-          {message.timestamp
-            ? new Date(message.timestamp).toLocaleTimeString()
-            : new Date().toLocaleTimeString()}
-        </div>
       </div>
     );
   }
 
   // Agent message: full width, no bubble
   return (
-    <div className="flex flex-col gap-1 group">
+    <div className="flex flex-col gap-1">
       {isToolCall ? (
         <Card className="border-blue-200 bg-blue-50/50 dark:bg-blue-950/20">
           <CardContent className="p-4">
@@ -546,11 +541,6 @@ function MessageBubble({ message }: MessageBubbleProps) {
           <Markdown content={message.content} />
         </div>
       )}
-      <div className="text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
-        {message.timestamp
-          ? new Date(message.timestamp).toLocaleTimeString()
-          : new Date().toLocaleTimeString()}
-      </div>
     </div>
   );
 }
