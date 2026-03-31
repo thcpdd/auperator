@@ -210,6 +210,9 @@ class EventAutoSendMiddleware(AgentMiddleware[AgentState, ContextT, ResponseT]):
         tool_name = request.tool_call.get("name", "")
         tool_args = request.tool_call.get("args", {})
 
+        # 生成唯一的 event_id，用于关联工具调用和结果
+        tool_event_id = str(uuid.uuid4())
+
         # Send tool call event (before execution)
         try:
             event = Event.create_tool_event(
@@ -217,9 +220,10 @@ class EventAutoSendMiddleware(AgentMiddleware[AgentState, ContextT, ResponseT]):
                 tool=tool_name,
                 args=tool_args,
                 content="",  # 工具调用前，content 为空
+                event_id=tool_event_id,  # 使用相同的 event_id
             )
             await self.event_center.publish_event(event)
-            logger.debug(f"Sent tool call event: {tool_name}")
+            logger.debug(f"Sent tool call event: {tool_name}, event_id: {tool_event_id}")
         except Exception as e:
             logger.error(f"Error capturing tool call: {e}")
 
@@ -235,10 +239,11 @@ class EventAutoSendMiddleware(AgentMiddleware[AgentState, ContextT, ResponseT]):
                     thread_id=thread_id,
                     tool=tool_name,
                     args=tool_args,
-                    content=content  # 工具执行结果
+                    content=content,  # 工具执行结果
+                    event_id=tool_event_id,  # 使用相同的 event_id
                 )
                 await self.event_center.publish_event(tool_result_event)
-                logger.debug(f"Sent tool result event: {tool_name}")
+                logger.debug(f"Sent tool result event: {tool_name}, event_id: {tool_event_id}")
         except Exception as e:
             logger.error(f"Error capturing tool result: {e}")
 

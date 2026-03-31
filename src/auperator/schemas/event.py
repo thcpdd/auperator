@@ -133,6 +133,7 @@ class Event(BaseModel):
         tool: str,
         args: dict[str, Any],
         content: str,
+        event_id: str | None = None,
         **kwargs
     ) -> "Event":
         """创建工具调用事件.
@@ -142,12 +143,14 @@ class Event(BaseModel):
             tool: 工具名称
             args: 工具参数
             content: 工具执行结果
+            event_id: 事件ID，如果不提供则自动生成（可用于关联工具调用和结果）
             **kwargs: 其他字段
 
         Returns:
             Event 实例
         """
         return cls(
+            event_id=event_id or str(uuid4()),
             event_type=EventType.TOOL,
             thread_id=thread_id,
             data={

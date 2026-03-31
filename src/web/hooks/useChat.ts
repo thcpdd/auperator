@@ -163,27 +163,24 @@ export function useChat({ initialThreadId, onEvent, onSendingComplete, onNewConv
 
         // Check if this is a tool call result (has content) or initial call (no content)
         if (data.content && data.content.trim()) {
-          // Tool result - find and update the pending tool message
+          // Tool result - find and update the pending tool message by event_id
           setMessages((prev) => {
             const updated = [...prev];
-            // Find the last message from this tool that is not complete
-            for (let i = updated.length - 1; i >= 0; i--) {
-              const msg = updated[i];
-              if (msg.toolName === data.tool && !msg.isToolComplete) {
-                // Update the message with result
-                updated[i] = {
-                  ...msg,
-                  content: `🔧 工具调用: ${data.tool || "未知"}`,
-                  toolOutput: data.content,
-                  isToolComplete: true,
-                };
-                break;
-              }
+            // Find the message with matching event_id
+            const index = updated.findIndex((msg) => msg.eventId === event.event_id);
+            if (index !== -1) {
+              // Update the message with result
+              updated[index] = {
+                ...updated[index],
+                content: `🔧 工具调用: ${data.tool || "未知"}`,
+                toolOutput: data.content,
+                isToolComplete: true,
+              };
             }
             return updated;
           });
         } else {
-          // Initial tool call - add a pending message
+          // Initial tool call - add a pending message with event_id
           const toolMessage: Message = {
             role: "assistant",
             content: `⏳ 调用工具: ${data.tool || "未知"}...`,
@@ -191,6 +188,7 @@ export function useChat({ initialThreadId, onEvent, onSendingComplete, onNewConv
             toolName: data.tool,
             toolArgs: data.args,
             isToolComplete: false,
+            eventId: event.event_id, // Store event_id to match with result
           };
           setMessages((prev) => [...prev, toolMessage]);
         }

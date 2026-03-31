@@ -35,6 +35,7 @@ export interface Message {
   toolArgs?: Record<string, unknown>;
   toolOutput?: string; // Tool execution result
   isToolComplete?: boolean; // Whether tool execution is complete
+  eventId?: string; // Event ID to match tool call with result
 }
 
 export interface ConversationHistory {
