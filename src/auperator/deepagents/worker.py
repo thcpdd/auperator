@@ -52,8 +52,10 @@ class AgentWorker:
         self.langfuse_handler: CallbackHandler | None = None
         self._conn: aiosqlite.Connection | None = None
 
-        # 任务管理：thread_id -> asyncio.Task
-        self.running_tasks: dict[str, asyncio.Task] = {}
+        # 队列管理：thread_id -> asyncio.Queue[Event]
+        self.event_queues: dict[str, asyncio.Queue[Event]] = {}
+        # 队列处理任务：thread_id -> asyncio.Task
+        self.queue_tasks: dict[str, asyncio.Task] = {}
         # 字典访问锁
         self._lock = asyncio.Lock()
 
@@ -88,7 +90,7 @@ class AgentWorker:
         """清理资源"""
         logger.info("🧹 清理 Agent Worker 资源")
 
-        # 停止任务
+        # 停止主任务
         if self.task:
             self.task.cancel()
             try:
@@ -97,6 +99,13 @@ class AgentWorker:
                 pass
             finally:
                 self.task = None
+
+        # 停止所有队列处理任务
+        async with self._lock:
+            for thread_id, queue_task in list(self.queue_tasks.items()):
+                queue_task.cancel()
+            self.queue_tasks.clear()
+            self.event_queues.clear()
 
         # 关闭 SQLite 连接
         if self._conn is not None:
@@ -121,6 +130,25 @@ class AgentWorker:
         state = await self.agent.aget_state({"configurable": {"thread_id": thread_id}})
         messages = state.values.get("messages", [])
         return messages
+
+    def get_queue_status(self, thread_id: str) -> dict | None:
+        """获取队列状态
+
+        Args:
+            thread_id: 会话 ID
+
+        Returns:
+            队列状态字典，如果队列不存在则返回 None
+        """
+        queue = self.event_queues.get(thread_id)
+        if queue is None:
+            return None
+
+        return {
+            "thread_id": thread_id,
+            "is_queued": True,
+            "queue_size": queue.qsize(),
+        }
 
     async def start(self):
         """启动 Agent Worker
@@ -156,16 +184,9 @@ class AgentWorker:
     async def _run(self):
         """运行消费循环"""
         try:
-            # 开始消费事件
             async for event in self.event_center.consume(self.consumer_group):
-                # 处理不同类型的事件
                 if event.event_type == EventType.USER:
-                    # 创建后台任务并记录
-                    task = asyncio.create_task(self._handle_user_event(event))
-
-                    async with self._lock:
-                        self.running_tasks[event.thread_id] = task
-
+                    await self._handle_user_event(event)
                 elif event.event_type == EventType.STOP:
                     await self._handle_stop_event(event)
         except asyncio.CancelledError:
@@ -174,24 +195,76 @@ class AgentWorker:
             logger.exception(f"❌ Agent Worker 出错: {e}")
 
     async def _handle_user_event(self, event: Event):
-        """处理 USER 事件
+        """处理 USER 事件，加入队列或创建队列
 
         Args:
             event: 事件对象
         """
         thread_id = event.thread_id
-        logger.info(f"📨 收到 user 事件: {thread_id}")
 
+        async with self._lock:
+            is_new_queue = thread_id not in self.event_queues
+            if is_new_queue:
+                self.event_queues[thread_id] = asyncio.Queue()
+                queue_task = asyncio.create_task(self._process_queue(thread_id))
+                self.queue_tasks[thread_id] = queue_task
+                logger.info(f"✅ 为 {thread_id} 创建事件队列")
+
+        queue = self.event_queues[thread_id]
+        queue_position = queue.qsize()
+
+        # 只有需要排队时才发送排队事件
+        if queue_position > 0:
+            queued_event = Event.create_queued_event(
+                thread_id=thread_id,
+                queue_position=queue_position,
+                queue_size=queue_position + 1
+            )
+            await self.event_center.publish_event(queued_event)
+            logger.info(f"📥 消息已加入队列: {thread_id}, position: {queue_position}")
+        else:
+            logger.info(f"📥 消息立即处理: {thread_id}")
+
+        # 加入队列
+        await queue.put(event)
+
+    async def _process_queue(self, thread_id: str):
+        """处理单个 thread_id 的消息队列
+
+        Args:
+            thread_id: 会话 ID
+        """
         try:
-            # 创建并启动 agent 任务
-            await self._run_agent(thread_id, event.data["content"])
-        except asyncio.CancelledError:
-            logger.info(f"⏹️ 任务被取消: {thread_id}")
+            while True:
+                queue = self.event_queues.get(thread_id)
+                if not queue:
+                    break
+
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=10)
+                except asyncio.TimeoutError:
+                    if queue.empty():
+                        logger.debug(f"✅ 队列空闲，退出处理: {thread_id}")
+                        break
+                    continue
+
+                logger.info(f"🔄 开始处理队列消息: {thread_id}")
+
+                try:
+                    await self._run_agent(thread_id, event.data["content"])
+                except asyncio.CancelledError:
+                    logger.info(f"⏹️ 任务被取消: {thread_id}")
+                    break
+                except Exception as e:
+                    logger.exception(f"❌ 处理消息失败: {thread_id}, {e}")
+                finally:
+                    queue.task_done()
+
         finally:
-            # 清理任务记录
             async with self._lock:
-                self.running_tasks.pop(thread_id, None)
-                logger.debug(f"🧹 任务已清理: {thread_id}")
+                self.event_queues.pop(thread_id, None)
+                self.queue_tasks.pop(thread_id, None)
+                logger.info(f"🧹 队列已清理: {thread_id}")
 
     async def _handle_stop_event(self, event: Event):
         """处理 STOP 事件
@@ -204,13 +277,12 @@ class AgentWorker:
         logger.info(f"🛑 收到停止事件: {thread_id}, 原因: {reason}")
 
         async with self._lock:
-            # 取消正在运行的任务
-            if thread_id in self.running_tasks:
-                task = self.running_tasks[thread_id]
-                task.cancel()
-                logger.info(f"✅ 任务已取消: {thread_id}")
+            queue_task = self.queue_tasks.get(thread_id)
+            if queue_task:
+                queue_task.cancel()
+                logger.info(f"✅ 队列任务已取消: {thread_id}")
             else:
-                logger.warning(f"⚠️ 未找到运行中的任务: {thread_id}")
+                logger.warning(f"⚠️ 未找到运行中的队列: {thread_id}")
 
     async def _run_agent(self, thread_id: str, content: str):
         """运行 Agent

@@ -86,6 +86,28 @@ class APIClient {
     });
   }
 
+  async getQueueStatus(threadId: string): Promise<{ thread_id: string; is_queued: boolean; queue_size: number } | null> {
+    const url = `${this.baseUrl}/chat/conversations/${threadId}/queue-status`;
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (response.status === 404 || response.status === 204) {
+      // Queue is empty or doesn't exist
+      return null;
+    }
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`API Error: ${response.status} - ${error}`);
+    }
+
+    return response.json();
+  }
+
   // SSE Events (using Next.js API route to support streaming)
   connectEvents(
     threadId?: string,

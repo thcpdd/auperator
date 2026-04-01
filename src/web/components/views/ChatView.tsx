@@ -64,7 +64,7 @@ export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
     });
   }, [addConversation]);
 
-  const { messages, threadId, isLoading, isLoadingHistory, sendMessage, handleEvent, clearMessages, loadConversation, stopGenerating } =
+  const { messages, threadId, isLoading, isLoadingHistory, queuedMessages, sendMessage, handleEvent, clearMessages, loadConversation, stopGenerating } =
     useChat({
       initialThreadId,
       onSendingComplete: () => setIsSending(false),
@@ -111,11 +111,16 @@ export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
   }, [messages, isLoadingHistory]);
 
   const handleSend = async () => {
-    if (!input.trim() || isLoading || isSending) return;
+    if (!input.trim()) return;
 
     const messageContent = input.trim();
     setInput("");
-    setIsSending(true); // 开始发送，显示加载状态
+
+    // Only show sending animation when agent is not running
+    if (!isLoading) {
+      setIsSending(true);
+    }
+
     await sendMessage(messageContent);
   };
 
@@ -248,6 +253,36 @@ export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
         {/* Input Area */}
         <div className="border-t bg-background p-4">
           <div className="mx-auto max-w-5xl">
+            {/* Queued Messages Display */}
+            {queuedMessages.length > 0 && (
+              <div className="mb-3 space-y-2">
+                <div className="flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2">
+                  <div className="flex gap-1">
+                    <div className="h-2 w-2 animate-pulse rounded-full bg-primary" />
+                    <div className="h-2 w-2 animate-pulse rounded-full bg-primary [animation-delay:0.2s]" />
+                  </div>
+                  <span className="text-sm font-medium text-primary">
+                    {queuedMessages[0].queuePosition > 0
+                      ? `排队中 (${queuedMessages[0].queuePosition + 1}/${queuedMessages[0].queueSize})`
+                      : "正在处理..."}
+                  </span>
+                </div>
+                {queuedMessages.map((queued) => (
+                  <div
+                    key={`${queued.queuePosition}-${queued.userMessage}`}
+                    className="flex items-center gap-2 rounded-md border border-muted bg-muted/30 px-3 py-2"
+                  >
+                    <span className="text-xs text-muted-foreground">
+                      {queued.queuePosition === 0 ? "🔄" : `${queued.queuePosition}.`}
+                    </span>
+                    <span className="text-sm text-muted-foreground">
+                      {queued.userMessage || queued.message}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div className="flex items-end gap-2">
               <Textarea
                 value={input}
@@ -255,16 +290,29 @@ export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
                 onKeyDown={handleKeyDown}
                 placeholder="输入消息... (Enter 发送, Shift+Enter 换行)"
                 className="min-h-[60px] max-h-[200px] resize-none"
-                disabled={isLoading}
               />
               {isLoading ? (
-                <Button
-                  onClick={handleStop}
-                  size="icon"
-                  className="h-[60px] w-[60px] shrink-0 bg-destructive hover:bg-destructive/90"
-                >
-                  <Square className="h-5 w-5" />
-                </Button>
+                <>
+                  {/* Send Button (for queuing) */}
+                  <Button
+                    onClick={handleSend}
+                    disabled={!input.trim()}
+                    size="icon"
+                    className="h-[60px] w-[60px] shrink-0"
+                    title="发送到队列"
+                  >
+                    <Send className="h-5 w-5" />
+                  </Button>
+                  {/* Stop Button */}
+                  <Button
+                    onClick={handleStop}
+                    size="icon"
+                    className="h-[60px] w-[60px] shrink-0 bg-destructive hover:bg-destructive/90"
+                    title="停止执行并清空队列"
+                  >
+                    <Square className="h-5 w-5" />
+                  </Button>
+                </>
               ) : (
                 <Button
                   onClick={handleSend}

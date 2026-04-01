@@ -16,6 +16,7 @@ class EventType(str, Enum):
     AGENT = "agent"
     TOOL = "tool"
     STOP = "stop"
+    QUEUED = "queued"
 
 
 class UserEventData(BaseModel):
@@ -185,6 +186,36 @@ class Event(BaseModel):
             thread_id=thread_id,
             data={
                 "reason": reason,
+                **kwargs
+            }
+        )
+
+    @classmethod
+    def create_queued_event(
+        cls,
+        thread_id: str,
+        queue_position: int,
+        queue_size: int,
+        **kwargs
+    ) -> "Event":
+        """创建排队事件.
+
+        Args:
+            thread_id: 会话标识
+            queue_position: 队列位置（0 表示正在处理，>0 表示前方有多少条消息）
+            queue_size: 队列总大小
+            **kwargs: 其他字段
+
+        Returns:
+            Event 实例
+        """
+        return cls(
+            event_type=EventType.QUEUED,
+            thread_id=thread_id,
+            data={
+                "queue_position": queue_position,
+                "queue_size": queue_size,
+                "message": f"您的消息已加入处理队列，前方还有 {queue_position} 条消息" if queue_position > 0 else "消息正在处理中",
                 **kwargs
             }
         )

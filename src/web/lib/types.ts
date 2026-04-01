@@ -54,7 +54,7 @@ export interface BackendMessage {
 }
 
 // Event Types
-export type EventType = "user" | "agent" | "tool";
+export type EventType = "user" | "agent" | "tool" | "queued";
 
 export interface UserEventData {
   message_type: string;
@@ -73,10 +73,17 @@ export interface ToolEventData {
   content?: string; // Tool result (empty when calling, has content when done)
 }
 
+export interface QueuedEventData {
+  queue_position: number; // Position in queue (0 = currently processing)
+  queue_size: number; // Total queue size
+  message: string; // Display message
+  user_message?: string; // The actual message content that was queued
+}
+
 export interface Event {
   event_id: string;
   event_type: EventType;
   thread_id: string;
   timestamp: string;
-  data: UserEventData | AgentEventData | ToolEventData;
+  data: UserEventData | AgentEventData | ToolEventData | QueuedEventData;
 }

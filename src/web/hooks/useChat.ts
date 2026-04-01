@@ -2,7 +2,15 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { apiClient } from "@/lib/api";
-import { Message, Event, AgentEventData, ToolEventData } from "@/lib/types";
+import { Message, Event, AgentEventData, ToolEventData, QueuedEventData } from "@/lib/types";
+
+// Queued message interface
+export interface QueuedMessage {
+  queuePosition: number;
+  queueSize: number;
+  message: string;
+  userMessage?: string;
+}
 
 interface UseChatOptions {
   initialThreadId?: string;
@@ -16,9 +24,11 @@ export function useChat({ initialThreadId, onEvent, onSendingComplete, onNewConv
   const [threadId, setThreadId] = useState<string | undefined>(initialThreadId);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [queuedMessages, setQueuedMessages] = useState<QueuedMessage[]>([]);
   const loadedThreadIdRef = useRef<string | undefined>(undefined);
   const onSendingCompleteRef = useRef<(() => void) | undefined>(onSendingComplete);
   const hasClearedSendingRef = useRef(false);
+  const processedDoneEventRef = useRef<string | undefined>(undefined); // Track processed [Done] events
 
   // Update ref when callback changes
   useEffect(() => {
@@ -86,12 +96,41 @@ export function useChat({ initialThreadId, onEvent, onSendingComplete, onNewConv
 
   const sendMessage = useCallback(
     async (content: string) => {
-      if (!content.trim() || isLoading) return;
+      if (!content.trim()) return;
 
       // Reset sending complete flag for new message
       hasClearedSendingRef.current = false;
 
-      // Add user message immediately
+      // If agent is currently running and we have a threadId, check queue status first
+      if (isLoading && threadId) {
+        try {
+          const queueStatus = await apiClient.getQueueStatus(threadId);
+          if (queueStatus !== null) {
+            // Queue exists - there is a task running or queued
+            const queuedMsg: QueuedMessage = {
+              queuePosition: queueStatus.queue_size,
+              queueSize: queueStatus.queue_size + 1,
+              message: queueStatus.queue_size > 0
+                ? `您的消息已加入处理队列，前方还有 ${queueStatus.queue_size} 条消息`
+                : "消息正在处理中",
+              userMessage: content.trim(),
+            };
+            setQueuedMessages((prev) => [...prev, queuedMsg]);
+
+            // Send to backend (backend will queue it)
+            await apiClient.sendMessage({
+              message: content.trim(),
+              thread_id: threadId,
+            });
+            return; // Don't add to messages yet, it's queued
+          }
+          // queueStatus is null - no task running, send the message
+        } catch (error) {
+          console.warn("Failed to check queue status, sending anyway:", error);
+        }
+      }
+
+      // Add user message immediately (only when not queuing)
       const userMessage: Message = {
         role: "user",
         content: content.trim(),
@@ -148,7 +187,53 @@ export function useChat({ initialThreadId, onEvent, onSendingComplete, onNewConv
         if (data.content) {
           // Check if this is a Done message
           if (data.content === "[Done]") {
-            setIsLoading(false);
+            // Prevent duplicate processing of the same [Done] event
+            if (processedDoneEventRef.current === event.event_id) {
+              return;
+            }
+            processedDoneEventRef.current = event.event_id;
+
+            // Process the queue when a task completes
+            setQueuedMessages((prev) => {
+              if (prev.length > 0) {
+                const firstQueued = prev[0];
+                const remainingQueue = prev.slice(1);
+
+                // Add the first queued message to chat in the next render cycle
+                // We'll use setTimeout to avoid state update during state update
+                if (firstQueued.userMessage) {
+                  setTimeout(() => {
+                    setMessages((msgPrev) => {
+                      // Check if this message already exists (avoid duplicates)
+                      const exists = msgPrev.some(
+                        (msg) => msg.role === "user" && msg.content === firstQueued.userMessage
+                      );
+                      if (!exists) {
+                        const userMessage: Message = {
+                          role: "user",
+                          content: firstQueued.userMessage as string,
+                          timestamp: new Date().toISOString(),
+                        };
+                        return [...msgPrev, userMessage];
+                      }
+                      return msgPrev;
+                    });
+                  }, 0);
+                }
+
+                // If no more queued messages, set loading to false
+                if (remainingQueue.length === 0) {
+                  setTimeout(() => setIsLoading(false), 0);
+                }
+
+                return remainingQueue;
+              }
+
+              // No queued messages, set loading to false
+              setIsLoading(false);
+              return prev;
+            });
+
             onSendingCompleteRef.current?.();
             return;
           }
@@ -215,6 +300,27 @@ export function useChat({ initialThreadId, onEvent, onSendingComplete, onNewConv
         }
       } else if (event.event_type === "user") {
         // Skip user events - already added by sendMessage
+      } else if (event.event_type === "queued") {
+        // Handle queued message event
+        const data = event.data as QueuedEventData;
+        const queuedMsg: QueuedMessage = {
+          queuePosition: data.queue_position,
+          queueSize: data.queue_size,
+          message: data.message,
+          userMessage: data.user_message,
+        };
+
+        setQueuedMessages((prev) => {
+          // Check if this message is already in the queue (by userMessage)
+          const exists = prev.some((msg) => msg.userMessage === data.user_message);
+          if (!exists && data.user_message) {
+            return [...prev, queuedMsg];
+          }
+          return prev;
+        });
+
+        // Set loading to true if not already
+        setIsLoading(true);
       }
     },
     [threadId, onEvent]
@@ -224,11 +330,13 @@ export function useChat({ initialThreadId, onEvent, onSendingComplete, onNewConv
     setMessages([]);
     setThreadId(undefined);
     setIsLoading(false);
+    setQueuedMessages([]);
     loadedThreadIdRef.current = undefined;
   }, []);
 
   const stopGenerating = useCallback(() => {
     setIsLoading(false);
+    setQueuedMessages([]); // Clear queue when stopping
     onSendingCompleteRef.current?.();
   }, []);
 
@@ -237,6 +345,7 @@ export function useChat({ initialThreadId, onEvent, onSendingComplete, onNewConv
     threadId,
     isLoading,
     isLoadingHistory,
+    queuedMessages,
     sendMessage,
     handleEvent,
     clearMessages,

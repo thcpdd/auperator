@@ -324,3 +324,38 @@ async def stop_conversation(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"停止对话失败: {str(e)}",
         )
+
+
+@router.get("/conversations/{thread_id}/queue-status")
+async def get_queue_status(
+    thread_id: str,
+    agent_worker: AgentWorker = Depends(get_agent_worker)
+):
+    """查询对话的队列状态
+
+    Args:
+        thread_id: 会话 thread_id
+        agent_worker: Agent Worker
+
+    Returns:
+        队列状态信息
+    """
+    try:
+        status = agent_worker.get_queue_status(thread_id)
+
+        if status is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"队列不存在或已完成: {thread_id}"
+            )
+
+        return status
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"❌ 查询队列状态失败: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"查询队列状态失败: {str(e)}",
+        )
