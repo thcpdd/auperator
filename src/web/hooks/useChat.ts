@@ -159,6 +159,9 @@ export function useChat({ initialThreadId, onEvent, onSendingComplete, onNewConv
             onSendingCompleteRef.current?.();
           }
 
+          // Set loading to true if not already (for non-user-initiated conversations)
+          setIsLoading(true);
+
           // Text response from agent - keep loading true until Done
           const assistantMessage: Message = {
             role: "assistant",
@@ -175,6 +178,9 @@ export function useChat({ initialThreadId, onEvent, onSendingComplete, onNewConv
           hasClearedSendingRef.current = true;
           onSendingCompleteRef.current?.();
         }
+
+        // Set loading to true if not already (for non-user-initiated conversations)
+        setIsLoading(true);
 
         // Check if this is a tool call result (has content) or initial call (no content)
         if (data.content && data.content.trim()) {
