@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Plus, MessageSquare, MoreHorizontal, ChevronRight, ChevronLeft, Pencil, Trash2, Check, Loader2, Square } from "lucide-react";
+import { Send, Plus, MessageSquare, MoreHorizontal, ChevronRight, ChevronLeft, Pencil, Trash2, Check, Loader2, Square, Activity, ScrollText, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -100,7 +100,7 @@ export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
   // Typing effect for welcome message
   useEffect(() => {
     if (messages.length === 0 && !isLoadingHistory) {
-      setTypedText("");
+      setTypedText(""); // Reset typing
       let index = 0;
       const timer = setInterval(() => {
         if (index <= welcomeText.length) {
@@ -242,14 +242,57 @@ export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
                 </div>
               </div>
             ) : messages.length === 0 ? (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="text-center">
-                  <h2 className="text-2xl font-semibold text-foreground">
-                    开始与 Auperator 对话
-                  </h2>
-                  <div className="mt-2 flex items-center justify-center text-sm text-muted-foreground">
-                    {typedText}
-                    <span className="ml-0.5 inline-block w-0.5 h-4 bg-current animate-pulse" />
+              <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-background via-background to-primary/5">
+                <div className="text-center space-y-8 px-6 max-w-2xl">
+                  {/* Icon with glow effect */}
+                  <div className="relative inline-block">
+                    <div className="absolute inset-0 bg-primary/20 blur-3xl rounded-full" />
+                    <div className="relative bg-gradient-to-br from-primary to-primary/80 p-6 rounded-2xl shadow-2xl shadow-primary/20 animate-in fade-in zoom-in duration-700">
+                      <MessageSquare className="h-12 w-12 text-primary-foreground" />
+                    </div>
+                  </div>
+
+                  {/* Title with gradient */}
+                  <div className="space-y-3 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-150">
+                    <h1 className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-foreground via-foreground to-foreground/70">
+                      Auperator
+                    </h1>
+                    <p className="text-lg text-muted-foreground font-medium">
+                      AI 超级运维智能体
+                    </p>
+                  </div>
+
+                  {/* Description with typing effect */}
+                  <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-300">
+                    <p className="text-sm text-muted-foreground/80 leading-relaxed">
+                      自动监控日志、分析问题并提交修复
+                    </p>
+                    <div className="flex items-center justify-center text-sm text-foreground">
+                      {welcomeText}
+                      <span className="ml-1 inline-block w-0.5 h-4 bg-primary animate-pulse" />
+                    </div>
+                  </div>
+
+                  {/* Feature hints */}
+                  <div className="grid grid-cols-3 gap-4 pt-4 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-500">
+                    <div className="flex flex-col items-center gap-2 p-3 rounded-lg bg-card/50 border border-border/50 hover:border-primary/30 hover:bg-card/80 transition-all duration-300">
+                      <div className="p-2 rounded-lg bg-primary/10">
+                        <Activity className="h-4 w-4 text-primary" />
+                      </div>
+                      <span className="text-xs text-muted-foreground">实时监控</span>
+                    </div>
+                    <div className="flex flex-col items-center gap-2 p-3 rounded-lg bg-card/50 border border-border/50 hover:border-primary/30 hover:bg-card/80 transition-all duration-300">
+                      <div className="p-2 rounded-lg bg-primary/10">
+                        <ScrollText className="h-4 w-4 text-primary" />
+                      </div>
+                      <span className="text-xs text-muted-foreground">日志分析</span>
+                    </div>
+                    <div className="flex flex-col items-center gap-2 p-3 rounded-lg bg-card/50 border border-border/50 hover:border-primary/30 hover:bg-card/80 transition-all duration-300">
+                      <div className="p-2 rounded-lg bg-primary/10">
+                        <Settings className="h-4 w-4 text-primary" />
+                      </div>
+                      <span className="text-xs text-muted-foreground">自动修复</span>
+                    </div>
                   </div>
                 </div>
               </div>
