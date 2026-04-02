@@ -391,11 +391,10 @@ export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
                             loadConversation(conv.thread_id);
                           }
                         }}
-                        className="flex min-w-0 items-center gap-2 text-left"
-                        style={{ maxWidth: "calc(100% - 36px)" }}
+                        className="flex min-w-0 flex-1 items-center gap-2 text-left"
                       >
                         <MessageSquare className="h-4 w-4 shrink-0" />
-                        <span className="min-w-0 flex-1 truncate font-medium">
+                        <span className="max-w-[200px] truncate font-medium">
                           {conv.title}
                         </span>
                       </button>
