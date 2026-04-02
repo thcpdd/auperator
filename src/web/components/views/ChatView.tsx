@@ -42,6 +42,10 @@ export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
   const [isSending, setIsSending] = useState(false);
   const onEventRef = useRef<(event: Event) => void>(undefined);
 
+  // Typing effect for welcome message
+  const [typedText, setTypedText] = useState("");
+  const welcomeText = "询问关于系统状态、日志分析或Bug修复的问题";
+
   // Rename dialog state
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const [renamingThreadId, setRenamingThreadId] = useState<string | undefined>();
@@ -92,6 +96,24 @@ export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
     onEvent: handleSSEEvent,
     enabled: !!threadId,
   });
+
+  // Typing effect for welcome message
+  useEffect(() => {
+    if (messages.length === 0 && !isLoadingHistory) {
+      setTypedText("");
+      let index = 0;
+      const timer = setInterval(() => {
+        if (index <= welcomeText.length) {
+          setTypedText(welcomeText.slice(0, index));
+          index++;
+        } else {
+          clearInterval(timer);
+        }
+      }, 50); // 50ms per character
+
+      return () => clearInterval(timer);
+    }
+  }, [messages.length, isLoadingHistory]);
 
   // Auto-scroll to bottom when new messages arrive or when history finishes loading
   useEffect(() => {
@@ -220,14 +242,15 @@ export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
                 </div>
               </div>
             ) : messages.length === 0 ? (
-              <div className="flex h-full items-center justify-center">
+              <div className="absolute inset-0 flex items-center justify-center">
                 <div className="text-center">
                   <h2 className="text-2xl font-semibold text-foreground">
                     开始与 Auperator 对话
                   </h2>
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    询问关于系统状态、日志分析或问题修复的问题
-                  </p>
+                  <div className="mt-2 flex items-center justify-center text-sm text-muted-foreground">
+                    {typedText}
+                    <span className="ml-0.5 inline-block w-0.5 h-4 bg-current animate-pulse" />
+                  </div>
                 </div>
               </div>
             ) : (
@@ -328,9 +351,6 @@ export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
                 </Button>
               )}
             </div>
-            <p className="mt-2 text-center text-xs text-muted-foreground">
-              Agent 可以访问系统日志、容器状态和自动化工具来帮助解决问题
-            </p>
           </div>
         </div>
       </div>
@@ -391,7 +411,7 @@ export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
                             loadConversation(conv.thread_id);
                           }
                         }}
-                        className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                        className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-left"
                       >
                         <MessageSquare className="h-4 w-4 shrink-0" />
                         <span className="max-w-[200px] truncate font-medium">
@@ -431,7 +451,7 @@ export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
                   {shouldPaginate && (
                     <button
                       onClick={() => setShowAllConversations(!showAllConversations)}
-                      className="flex w-full items-center justify-center gap-1 px-3 py-1.5 text-xs text-muted-foreground hover:text-accent-foreground"
+                      className="flex w-full cursor-pointer items-center justify-center gap-1 px-3 py-1.5 text-xs text-muted-foreground hover:text-accent-foreground"
                     >
                       <MoreHorizontal className="h-4 w-4" />
                       {showAllConversations
