@@ -10,7 +10,7 @@ from auperator.schemas.event import Event
 from auperator.events import EventCenter
 from auperator.collector.handlers.base import BaseLogHandler
 from auperator.database.db import get_db
-from auperator.database.models import Conversation
+from auperator.database.models import Conversation, ConversationSource
 
 
 logger = logging.getLogger(__name__)
@@ -56,6 +56,7 @@ class EventHandler(BaseLogHandler):
                     session=db_session,
                     thread_id=None,  # 每次错误日志都是新对话
                     title=title,
+                    source=ConversationSource.LOG,  # 错误日志自动发起
                 )
                 logger.info(f"🔖 Thread ID: {thread_id}, is_new: {is_new}")
             finally:

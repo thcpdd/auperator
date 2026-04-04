@@ -11,12 +11,15 @@ export interface SendMessageResponse {
   title?: string;
 }
 
+export type ConversationSource = "log" | "user";
+
 export interface Conversation {
   id?: number;
   thread_id: string;
   title: string;
   created_at: string;
   updated_at: string;
+  source?: ConversationSource; // log: 由日志发起, user: 由用户发起
 }
 
 export interface RenameConversationRequest {

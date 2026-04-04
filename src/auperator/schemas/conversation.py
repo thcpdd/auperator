@@ -1,7 +1,14 @@
 """Conversation 数据模型"""
 
 from datetime import datetime
+from enum import Enum
 from pydantic import BaseModel, Field
+
+
+class ConversationSource(str, Enum):
+    """对话来源枚举"""
+    USER = "user"  # 用户主动发起
+    LOG = "log"    # 错误日志自动发起
 
 
 class Conversation(BaseModel):
@@ -10,6 +17,7 @@ class Conversation(BaseModel):
     id: int
     thread_id: str
     title: str
+    source: ConversationSource
     created_at: datetime
     updated_at: datetime
 

@@ -1,7 +1,22 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Plus, MoreHorizontal, ChevronRight, ChevronLeft, Pencil, Trash2, Check, Loader2, Square, Activity, ScrollText, Settings } from "lucide-react";
+import {
+  Send,
+  Plus,
+  MoreHorizontal,
+  ChevronRight,
+  ChevronLeft,
+  Pencil,
+  Trash2,
+  Check,
+  Loader2,
+  Square,
+  Activity,
+  ScrollText,
+  Settings,
+  Bug,
+  MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -34,12 +49,15 @@ interface ChatViewProps {
   onThreadIdChange?: (threadId: string | undefined) => void;
 }
 
+type ConversationTab = 'log' | 'user';
+
 export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showAllConversations, setShowAllConversations] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isSending, setIsSending] = useState(false);
+  const [conversationTab, setConversationTab] = useState<ConversationTab>('log');
   const onEventRef = useRef<(event: Event) => void>(undefined);
 
   // Typing effect for welcome message
@@ -217,11 +235,21 @@ export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
     }
   };
 
-  // Show all conversations if less than 15, otherwise paginate
-  const shouldPaginate = conversations.length > 15;
+  // Group conversations by source
+  const logConversations = conversations.filter(conv => conv.source === 'log');
+  const userConversations = conversations.filter(conv => conv.source === 'user' || !conv.source);
+
+  // Get current tab's conversations
+  const currentConversations = conversationTab === 'log' ? logConversations : userConversations;
+  const totalCount = currentConversations.length;
+
+  // Show all conversations if less than 15, otherwise paginate (based on current tab)
+  const shouldPaginate = totalCount > 15;
+
+  // Apply pagination
   const displayedConversations = showAllConversations || !shouldPaginate
-    ? conversations
-    : conversations.slice(0, 15);
+    ? currentConversations
+    : currentConversations.slice(0, 15);
 
   return (
     <div className="flex h-full relative">
@@ -467,75 +495,121 @@ export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
         {/* Conversations List */}
         {isSidebarOpen && (
           <ScrollArea className="flex-1 px-3 py-2">
-          <div className="space-y-2">
+          <div className="space-y-3">
             {conversations.length > 0 && (
               <>
-                <div className="px-3 py-2 text-xs font-semibold text-muted-foreground/60 uppercase tracking-wider">
-                  历史消息 ({conversations.length})
+                {/* Tab Switcher */}
+                <div className="flex gap-1 p-1 bg-muted/50 rounded-lg">
+                  <button
+                    onClick={() => setConversationTab('log')}
+                    className={cn(
+                      "flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all cursor-pointer",
+                      conversationTab === 'log'
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground hover:bg-background/50"
+                    )}
+                  >
+                    <Bug className={cn("h-3.5 w-3.5", conversationTab === 'log' ? "text-orange-500" : "text-muted-foreground")} />
+                    错误日志
+                    <span className={cn(
+                      "px-1.5 py-0.5 rounded text-[10px]",
+                      conversationTab === 'log' ? "bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400" : "bg-muted-foreground/20"
+                    )}>
+                      {logConversations.length}
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => setConversationTab('user')}
+                    className={cn(
+                      "flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all cursor-pointer",
+                      conversationTab === 'user'
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground hover:bg-background/50"
+                    )}
+                  >
+                    <MessageSquare className={cn("h-3.5 w-3.5", conversationTab === 'user' ? "text-blue-500" : "text-muted-foreground")} />
+                    用户对话
+                    <span className={cn(
+                      "px-1.5 py-0.5 rounded text-[10px]",
+                      conversationTab === 'user' ? "bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400" : "bg-muted-foreground/20"
+                    )}>
+                      {userConversations.length}
+                    </span>
+                  </button>
                 </div>
-                <div className="space-y-1">
-                  {displayedConversations.map((conv) => (
-                    <div
-                      key={conv.thread_id}
-                      className={cn(
-                        "flex items-center gap-1 rounded-lg px-3 py-2 text-sm transition-colors group relative",
-                        threadId === conv.thread_id
-                          ? "bg-accent text-accent-foreground"
-                          : "text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground"
-                      )}
-                    >
-                      <button
-                        onClick={() => {
-                          if (conv.thread_id !== threadId) {
-                            loadConversation(conv.thread_id);
-                          }
-                        }}
-                        className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-left"
-                      >
-                        <span className="max-w-[200px] truncate font-medium">
-                          {conv.title}
-                        </span>
-                      </button>
-                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
-                            >
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleRenameClick(conv)}>
-                              <Pencil className="h-4 w-4 mr-2" />
-                              重命名
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => handleDeleteClick(conv.thread_id)}
-                              className="text-destructive focus:text-destructive"
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              删除
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </div>
-                  ))}
 
-                  {/* Show More/Less Button */}
-                  {shouldPaginate && (
-                    <button
-                      onClick={() => setShowAllConversations(!showAllConversations)}
-                      className="flex w-full cursor-pointer items-center justify-center gap-1 px-3 py-1.5 text-xs text-muted-foreground hover:text-accent-foreground"
-                    >
-                      <MoreHorizontal className="h-4 w-4" />
-                      {showAllConversations
-                        ? "收起"
-                        : `查看全部 (${conversations.length})`}
-                    </button>
+                {/* Conversations List */}
+                <div className="space-y-1">
+                  {displayedConversations.length > 0 ? (
+                    <>
+                      {displayedConversations.map((conv) => (
+                        <div
+                          key={conv.thread_id}
+                          className={cn(
+                            "flex items-center gap-1 rounded-lg px-3 py-2 text-sm transition-colors group relative",
+                            threadId === conv.thread_id
+                              ? "bg-accent text-accent-foreground"
+                              : "text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground"
+                          )}
+                        >
+                          <button
+                            onClick={() => {
+                              if (conv.thread_id !== threadId) {
+                                loadConversation(conv.thread_id);
+                              }
+                            }}
+                            className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-left"
+                          >
+                            <span className="max-w-[200px] truncate font-medium">
+                              {conv.title}
+                            </span>
+                          </button>
+                          <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                                >
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => handleRenameClick(conv)}>
+                                  <Pencil className="h-4 w-4 mr-2" />
+                                  重命名
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => handleDeleteClick(conv.thread_id)}
+                                  className="text-destructive focus:text-destructive"
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  删除
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        </div>
+                      ))}
+
+                      {/* Show More/Less Button */}
+                      {shouldPaginate && (
+                        <button
+                          onClick={() => setShowAllConversations(!showAllConversations)}
+                          className="flex w-full cursor-pointer items-center justify-center gap-1 px-3 py-1.5 text-xs text-muted-foreground hover:text-accent-foreground"
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                          {showAllConversations
+                            ? "收起"
+                            : `查看全部 (${totalCount})`}
+                        </button>
+                      )}
+                    </>
+                  ) : (
+                    <div className="px-3 py-8 text-center text-sm text-muted-foreground">
+                      {conversationTab === 'log' ? '还没有日志检测的对话' : '还没有用户对话'}
+                    </div>
                   )}
                 </div>
               </>

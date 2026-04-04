@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Body
 
 from auperator.config import settings
 from auperator.database.db import get_db_session
-from auperator.database.models import Conversation
+from auperator.database.models import Conversation, ConversationSource
 from auperator.schemas.conversation import Conversation as ConversationSchema, SendMessageRequest, RenameConversationRequest
 from auperator.schemas.event import Event
 from auperator.dependencies import get_event_center, get_agent_worker
@@ -53,6 +53,7 @@ async def send_message(
             session=db,
             thread_id=thread_id,
             title=title,
+            source=ConversationSource.USER,  # 用户主动发起
         )
 
         logger.info(f"📤 发送消息: thread_id={thread_id}, is_new={is_new}")
@@ -99,6 +100,7 @@ async def list_conversations(db: AsyncSession = Depends(get_db_session)):
                 id=conv.id,
                 thread_id=conv.thread_id,
                 title=conv.title,
+                source=conv.source,
                 created_at=conv.created_at,
                 updated_at=conv.updated_at,
             )
@@ -273,6 +275,7 @@ async def rename_conversation(
             id=conversation.id,
             thread_id=conversation.thread_id,
             title=conversation.title,
+            source=conversation.source,
             created_at=conversation.created_at,
             updated_at=conversation.updated_at,
         )

@@ -3,13 +3,20 @@
 import logging
 from typing import Tuple
 
-from sqlalchemy import Column, Integer, String, DateTime, select, func
+from sqlalchemy import Column, Integer, String, DateTime, select, func, Enum as SQLEnum
+from enum import Enum
 
 from auperator.database.base import Base
 from auperator.utils.checkpointer import generate_thread_id
 
 
 logger = logging.getLogger(__name__)
+
+
+class ConversationSource(str, Enum):
+    """对话来源枚举"""
+    USER = "user"  # 用户主动发起
+    LOG = "log"    # 错误日志自动发起
 
 
 class Conversation(Base):
@@ -20,6 +27,11 @@ class Conversation(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     thread_id = Column(String, unique=True, nullable=False, index=True)
     title = Column(String, nullable=False)
+    source = Column(
+        SQLEnum(ConversationSource, values_callable=lambda x: [e.value for e in x]),
+        nullable=False,
+        default=ConversationSource.USER
+    )
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
@@ -29,6 +41,7 @@ class Conversation(Base):
             "id": self.id,
             "thread_id": self.thread_id,
             "title": self.title,
+            "source": self.source.value if self.source else None,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
         }
@@ -72,6 +85,7 @@ class Conversation(Base):
         session,
         thread_id: str | None,
         title: str,
+        source: ConversationSource = ConversationSource.USER,
     ) -> Tuple[str, bool]:
         """获取或创建对话
 
@@ -83,6 +97,7 @@ class Conversation(Base):
             session: 异步数据库会话
             thread_id: 会话 thread_id（可选）
             title: 对话标题
+            source: 对话来源（默认为用户发起）
 
         Returns:
             Tuple[thread_id, is_new]: (会话ID, 是否为新对话)
@@ -106,9 +121,10 @@ class Conversation(Base):
         conversation = cls(
             thread_id=thread_id,
             title=title,
+            source=source,
         )
         session.add(conversation)
         await session.commit()
-        logger.info(f"✅ 创建新对话: {thread_id}, title: {title}")
+        logger.info(f"✅ 创建新对话: {thread_id}, title: {title}, source: {source.value}")
 
         return thread_id, is_new
