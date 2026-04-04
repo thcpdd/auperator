@@ -3,7 +3,13 @@
 import logging
 from typing import Any
 
-from daytona import AsyncDaytona, DaytonaConfig, AsyncSandbox
+from daytona import (
+    AsyncDaytona,
+    Daytona,
+    DaytonaConfig, 
+    AsyncSandbox, 
+    Sandbox
+)
 
 from auperator.config import settings
 
@@ -476,3 +482,35 @@ class DaytonaService:
             if "not found" in error_msg or "does not exist" in error_msg:
                 raise SandboxNotFoundError(f"Sandbox {sandbox_id} not found")
             raise
+
+
+def get_or_create_sync_daytona_sandbox() -> Sandbox:
+    config = DaytonaConfig(
+        api_key=settings.daytona_api_key,
+        api_url=settings.daytona_api_url,
+        target="us"
+    )
+    daytona_client = Daytona(config)
+    sandboxes = daytona_client.list()
+
+    for sandbox in sandboxes.items:
+        if sandbox.state == "started":
+            return sandbox
+
+    sandbox = daytona_client.create(timeout=settings.daytona_sandbox_timeout)
+
+    sandbox.process.exec('git config --global user.name "Auperator Bot"')
+    sandbox.process.exec('git config --global user.email "auperator@example.com"')
+
+    # Configure GitHub token authentication if available
+    github_token = settings.github_token
+    if github_token:
+        # URL rewriting to inject token into GitHub HTTPS URLs
+        sandbox.process.exec(
+            f'git config --global url."https://{github_token}@github.com/".insteadOf "https://github.com/"'
+        )
+        logger.info("GitHub token authentication configured")
+    else:
+        logger.warning("GITHUB_TOKEN not set, Git push operations may fail")
+
+    return sandbox

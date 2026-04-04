@@ -45,7 +45,7 @@ class GlobalState:
         self._initialize_redis()
         self._initialize_drain3()
         self._initialize_event_center()
-        await self._initialize_daytona()
+        # await self._initialize_daytona()
         await self._initialize_qdrant()
         logger.info("✅ All services initialized successfully")
 

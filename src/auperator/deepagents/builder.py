@@ -20,8 +20,11 @@ from langgraph.store.base import BaseStore
 from langgraph.types import Checkpointer
 
 from auperator.config import settings
+from auperator.services.daytona_service import get_or_create_sync_daytona_sandbox
+from .backends.daytona_sandbox import DaytonaSandbox
 from .backends.local_shell import LocalShellBackend
 from .backends.protocol import BackendFactory, BackendProtocol
+from .backends.composite import CompositeBackend
 from .middleware.event import EventAutoSendMiddleware
 from .middleware.filesystem import FilesystemMiddleware
 from .middleware.memory import MemoryMiddleware
@@ -181,10 +184,20 @@ def create_deep_agent(  # noqa: C901, PLR0912  # Complex graph assembly logic wi
     """
     model = get_default_model() if model is None else resolve_model(model)
 
-    # Use FilesystemBackend with auperator project root
-    # Agent can only access files in the current project directory
+    # Use CompositeBackend with Daytona sandbox as default
+    # Routes: default → Daytona (sandbox), /local → LocalShell (local filesystem)
     if backend is None:
-        backend = LocalShellBackend(root_dir=".", virtual_mode=True, inherit_env=True)
+        sandbox = get_or_create_sync_daytona_sandbox()
+        backend = CompositeBackend(
+            default=DaytonaSandbox(sandbox=sandbox),
+            routes={
+                "/local": LocalShellBackend(
+                    root_dir=".",
+                    virtual_mode=True,
+                    inherit_env=True,
+                )
+            },
+        )
 
     # Build general-purpose subagent with default middleware stack
     gp_middleware: list[AgentMiddleware[Any, Any, Any]] = [
