@@ -8,6 +8,11 @@ Auperator 是一个基于 DeepAgents 架构的智能运维系统，能够自动�
 
 Auperator 致力于解决传统运维系统中的痛点：被动响应、依赖人工分析、修复周期长。通过引入 AI Agent 技术，实现从问题发现到修复的全自动化闭环。
 
+**双界面模式**：
+
+- **CLI 模式**：命令行界面，用于日志消费和自动修复
+- **Web UI 模式**：基于 Next.js 的聊天界面，支持实时对话和事件流
+
 ## 核心功能
 
 ### 1. 日志采集（集成 Vector.dev）
@@ -36,14 +41,36 @@ Auperator 致力于解决传统运维系统中的痛点：被动响应、依赖�
 
 #### 核心能力
 
-| 能力 | 描述 |
-|------|------|
-| **问题分析** | 基于日志模板，分析错误根因 |
-| **代码沙箱** | 内置隔离的代码运行环境，安全执行修复代码 |
-| **自动修复** | 在沙箱中定位问题、实施修复、运行测试 |
+| 能力        | 描述                          |
+| --------- | --------------------------- |
+| **问题分析**  | 基于日志模板，分析错误根因               |
+| **代码沙箱**  | 内置隔离的代码运行环境，安全执行修复代码        |
+| **自动修复**  | 在沙箱中定位问题、实施修复、运行测试          |
 | **PR 提交** | 自动创建分支、提交代码、发起 Pull Request |
+| **记忆系统**  | 基于 Qdrant 的向量存储，支持长期记忆      |
+| **多轮对话**  | 支持上下文保持的对话交互                |
+
+### 4. Web UI（新增）
+
+基于 Next.js 的现代化 Web 界面：
+
+- **实时聊天**：与 Agent 进行自然语言交互
+- **对话管理**：创建、重命名、删除对话
+- **事件流**：基于 SSE 的实时事件推送
+- **源过滤**：按来源筛选对话（终端、Web UI）
+
+### 5. 事件系统（新增）
+
+基于 Redis Streams 的事件驱动架构：
+
+- **实时事件**：USER、AGENT、ERROR、STATUS 事件类型
+- **消费者组**：支持多消费者并行处理
+- **SSE 推送**：服务端事件流实时推送
+- **异步处理**：Agent Worker 后台任务处理
 
 ## 架构
+
+### 系统架构图
 
 ```
 ┌──────────────┐    ┌──────────────┐    ┌─────────────┐    ┌─────────────┐    ┌──────────────┐
@@ -56,9 +83,20 @@ Auperator 致力于解决传统运维系统中的痛点：被动响应、依赖�
                                                         │   Agent Handler  │
                                                         │      Consumer    │
                                                         └──────────────────┘
+
+┌──────────────┐    ┌──────────────┐    ┌─────────────┐    ┌─────────────┐    ┌──────────────┐
+│   Web UI     │───▶│  Chat API    │───▶│    Event    │───▶│   Redis      │───▶│   Agent       │
+│  (Next.js)   │    │  /chat/*     │    │   Center    │    │   Streams    │    │   Worker      │
+└──────────────┘    └──────────────┘    └─────────────┘    └─────────────┘    └──────────────┘
+                           │                                                        │
+                           │                                                        ▼
+                           └─────────────────────────────────────────────▶  ┌─────────────┐
+                                                                        │  SQLite DB  │
+                                                                        │(Conversations)│
+                                                                        └─────────────┘
 ```
 
-### 数据流
+### CLI 模式数据流
 
 1. **Vector** 采集 Docker 容器日志
 2. **Vector** 过滤错误日志（error、exception、traceback、5xx）
@@ -67,14 +105,27 @@ Auperator 致力于解决传统运维系统中的痛点：被动响应、依赖�
 5. **API** 只推送新模板到 Redis List
 6. **Agent Handler** 消费日志并调用 Agent 修复
 
+### Web UI 模式数据流
+
+1. **用户** 通过 Web UI 发送消息
+2. **前端** 调用 `POST /chat/messages`
+3. **后端** 在 SQLite 中创建对话记录
+4. **后端** 发布 USER 事件到 Redis Stream
+5. **AgentWorker** 消费事件并调用 Agent
+6. **Agent** 发布 AGENT 事件到 Redis Stream
+7. **前端** 通过 SSE 端点 `/events/web-ui` 接收事件
+8. **前端** 实时显示 Agent 响应
+
 ## 快速开始
 
 ### 系统要求
 
 - Python 3.11+
+- Node.js 18+ (用于 Web UI)
 - Vector 0.40+
 - Redis 7+
 - Docker（用于日志采集）
+- Qdrant（可选，用于记忆系统）
 
 ### 安装
 
@@ -83,8 +134,14 @@ Auperator 致力于解决传统运维系统中的痛点：被动响应、依赖�
 git clone https://github.com/thcpdd/auperator.git
 cd auperator
 
-# 安装依赖
+# 安装后端依赖
 uv pip install -e .
+
+# 安装前端依赖
+cd src/web
+npm install
+# 或使用 pnpm
+pnpm install
 ```
 
 ### 配置
@@ -104,9 +161,14 @@ REDIS_DB=0
 REDIS_KEY_PREFIX=auperator:
 REDIS_LIST_NAME=logs:main
 
+# 事件流配置
+REDIS_EVENT_STREAM=events:all
+
 # Drain3 配置
 DRAIN3_STATE_FILE=drain3.json
 DRAIN3_DEPTH=4
+DRAIN3_MAX_CLUSTERS=1000
+DRAIN3_MAX_CHILDREN=100
 DRAIN3_SIM_TH=0.4
 
 # OpenAI 配置
@@ -126,18 +188,69 @@ DAYTONA_API_URL=https://app.daytona.io/api
 # Git 配置
 REMOTE_REPO_URL=git@github.com:username/repo.git
 GITHUB_TOKEN=your-github-token
+
+# 嵌入模型配置（用于记忆系统）
+EMBEDDING_API_BASE_URL=https://api.openai.com/v1
+EMBEDDING_API_KEY=your-api-key
+EMBEDDING_MODEL=text-embedding-3-small
+EMBEDDING_VECTOR_SIZE=1536
+
+# Qdrant 配置
+QDRANT_URL=http://localhost:6333
+QDRANT_API_KEY=
+QDRANT_COLLECTION=auperator_memories
+
+# SQLite 配置
+SQLITE_DB_FILE=auperator.db.sqlite3
+
+# 消费者配置
+CONSUMER_BATCH_SIZE=1
+CONSUMER_BLOCK_TIMEOUT=5
 ```
 
 ### 启动服务
 
+#### 完整启动（后端 + 前端 + Vector）
+
 ```bash
-# 1. 启动 Auperator API 服务
+# 终端 1: 启动 Auperator API 服务
 auperator server
 
-# 2. 启动 Vector（另一个终端）
+# 终端 2: 启动 Vector（用于日志采集）
 vector --config vector.yaml
 
-# 3. 启动自动修复模式（第三个终端）
+# 终端 3: 启动 Web UI
+cd src/web
+npm run dev
+# 或
+pnpm dev
+
+# 终端 4: 启动自动修复模式（可选）
+auperator start
+```
+
+#### 仅启动 Web UI
+
+```bash
+# 终端 1: 启动 API 服务
+auperator server
+
+# 终端 2: 启动 Web UI
+cd src/web && npm run dev
+```
+
+访问 <http://localhost:3000> 使用 Web UI
+
+#### 仅启动 CLI 模式
+
+```bash
+# 终端 1: 启动 API 服务
+auperator server
+
+# 终端 2: 启动 Vector
+vector --config vector.yaml
+
+# 终端 3: 启动自动修复
 auperator start
 ```
 
@@ -193,6 +306,66 @@ auperator list-info [OPTIONS]
   -l, --list TEXT      List 名称
 ```
 
+## Web UI 功能
+
+### 主要功能
+
+- **聊天界面**：与 Agent 进行自然语言交互
+- **对话列表**：侧边栏显示所有对话历史
+- **对话管理**：创建、重命名、删除对话
+- **源过滤**：按来源筛选对话（终端、Web UI）
+- **实时响应**：基于 SSE 的实时事件流
+- **Markdown 渲染**：支持 Markdown 格式输出
+- **代码高亮**：语法高亮显示
+
+### API 端点
+
+#### 聊天相关
+
+```bash
+# 创建对话
+POST /chat/conversations
+
+# 获取对话列表
+GET /chat/conversations
+
+# 获取对话详情
+GET /chat/conversations/{conversation_id}
+
+# 更新对话标题
+PUT /chat/conversations/{conversation_id}
+
+# 删除对话
+DELETE /chat/conversations/{conversation_id}
+
+# 发送消息
+POST /chat/messages
+
+# 获取对话消息
+GET /chat/conversations/{conversation_id}/messages
+```
+
+#### 事件流
+
+```bash
+# Web UI 事件流（SSE）
+POST /events/web-ui
+Body: {"thread_id": "optional-conversation-id"}
+```
+
+#### 内存管理
+
+```bash
+# 搜索记忆
+GET /memory/search?q=query
+
+# 添加记忆
+POST /memory
+
+# 获取记忆列表
+GET /memory
+```
+
 ## 项目结构
 
 ```
@@ -204,6 +377,7 @@ auperator/
 ├── .env.example            # 环境变量配置示例
 ├── vector.yaml             # Vector 配置
 ├── drain3.json             # Drain3 状态文件（自动生成）
+├── auperator.db.sqlite3    # SQLite 数据库（自动生成）
 │
 ├── src/
 │   └── auperator/
@@ -215,24 +389,71 @@ auperator/
 │       │
 │       ├── collector/           # 日志采集和消费
 │       │   ├── handlers/        # 日志处理器
-│       │   │   ├── agent.py      # Agent 处理器（调用 LangGraph）
-│       │   │   └── console.py    # 控制台处理器（调试）
+│       │   │   ├── base.py      # 基础处理器接口
+│       │   │   ├── agent.py     # Agent 处理器（调用 LangGraph）
+│       │   │   ├── console.py   # 控制台处理器（调试）
+│       │   │   └── event.py     # 事件处理器（发布到 EventCenter）
 │       │   └── vector_consumer.py # Redis List 消费者
 │       │
+│       ├── deepagents/          # Agent 架构
+│       │   ├── builder.py       # Agent 创建工厂
+│       │   ├── worker.py        # Agent Worker（后台任务处理）
+│       │   ├── backends/        # 后端实现
+│       │   │   ├── protocol.py  # 后端协议定义
+│       │   │   ├── local_shell.py # 本地 Shell 后端
+│       │   │   ├── sandbox.py   # Daytona 沙箱后端
+│       │   │   ├── state.py     # 内存状态后端
+│       │   │   ├── filesystem.py # 文件系统后端
+│       │   │   └── store.py     # 持久化存储后端
+│       │   ├── middleware/      # Agent 中间件
+│       │   ├── tools/           # Agent 工具
+│       │   │   ├── docker_tools.py # Docker 操作
+│       │   │   └── pull_request.py # GitHub PR 创建
+│       │   ├── skills/          # 技能文件
+│       │   └── prompts/         # 系统提示词
+│       │
 │       ├── schemas/             # 数据模型
-│       │   ├── vector.py         # Vector 日志模型
-│       │   ├── daytona.py        # Daytona 模型
-│       │   └── log.py            # 日志数据模型
+│       │   ├── vector.py        # Vector 日志模型
+│       │   ├── daytona.py       # Daytona 模型
+│       │   ├── log.py           # 日志数据模型
+│       │   ├── event.py         # 事件模型
+│       │   ├── conversation.py  # 对话模型
+│       │   └── memory.py        # 记忆模型
 │       │
 │       ├── services/            # 业务服务
 │       │   ├── drain3_service.py # Drain3 服务
 │       │   └── daytona_service.py # Daytona 沙箱服务
 │       │
+│       ├── events/              # 事件系统
+│       │   ├── event_center.py  # 事件发布和消费
+│       │   └── __init__.py
+│       │
+│       ├── database/            # 数据库层
+│       │   ├── db.py            # 数据库会话管理
+│       │   ├── models.py        # SQLAlchemy 模型
+│       │   └── base.py          # 基础数据库类
+│       │
 │       └── routes/              # FastAPI 路由
-│           ├── vector.py         # Vector 日志接收
-│           └── daytona.py        # 沙箱管理
+│           ├── vector.py        # Vector 日志接收
+│           ├── daytona.py       # 沙箱管理
+│           ├── chat.py          # 聊天 API
+│           ├── events.py        # SSE 事件流
+│           └── memory.py        # 记忆管理
 │
-└── tests/                      # 测试用例
+└── web/                        # Next.js Web UI
+    ├── app/                    # Next.js app 目录
+    │   ├── page.tsx            # 主页面
+    │   ├── layout.tsx          # 根布局
+    │   ├── globals.css         # 全局样式
+    │   └── api/                # API 路由
+    ├── components/             # React 组件
+    │   ├── ChatView.tsx        # 聊天视图
+    │   ├── ConversationList.tsx # 对话列表
+    │   └── ...
+    ├── lib/                    # 工具库
+    │   ├── api.ts              # API 客户端
+    │   └── events.ts           # 事件处理
+    └── package.json            # 前端依赖
 ```
 
 ## Vector 配置
@@ -295,29 +516,72 @@ sinks:
 ```
 
 **注意**：
+
 - 如果 Vector 在 Docker 中运行，使用 `172.17.0.1` 访问宿主机服务
 - 如果 Vector 在宿主机运行，使用 `127.0.0.1`
 
+## 调试和监控
+
+### 查看 Redis 数据
+
+```bash
+# 查看 Redis List 中的日志数量
+redis-cli LLEN auperator:logs:main
+
+# 查看 Redis Stream 事件
+redis-cli XRANGE auperator:events:all - +
+
+# 查看消费者组
+redis-cli XINFO GROUPS auperator:events:all
+
+# 查看消费者
+redis-cli XINFO CONSUMERS auperator:events:all agent-worker
+
+# 查看对话历史
+sqlite3 auperator.db.sqlite3 "SELECT id, thread_id, title, created_at FROM conversations;"
+
+# 查看 Agent checkpoints
+sqlite3 auperator.db.sqlite3 "SELECT * FROM checkpoints;"
+```
+
+### 启用 Langfuse 追踪
+
+```bash
+auperator start --enable-langfuse
+```
+
+### 查看日志
+
+```bash
+# 终端消费模式（调试）
+auperator terminal-consume -v
+
+# 启用详细日志
+LOG_LEVEL=DEBUG auperator server
+```
+
 ## 工作流程示例
 
-### 1. 错误日志产生
+### CLI 模式 - 自动修复流程
+
+#### 1. 错误日志产生
 
 ```
 ERROR: Connection refused to 10.0.0.1:5432
 ```
 
-### 2. Vector 采集并发送
+#### 2. Vector 采集并发送
 
 ```json
 {
   "message": "ERROR: Connection refused to 10.0.0.1:5432",
-  "timestamp": "2026-03-17T14:30:00Z",
+  "timestamp": "2026-04-04T14:30:00Z",
   "container_name": "backend-1",
   "host": "server-01"
 }
 ```
 
-### 3. Drain3 提取模板
+#### 3. Drain3 提取模板
 
 ```json
 {
@@ -327,17 +591,17 @@ ERROR: Connection refused to 10.0.0.1:5432
 }
 ```
 
-### 4. 推送到 Redis
+#### 4. 推送到 Redis
 
 ```json
 {
   "message": "ERROR: Connection refused to <*:<:NUM:>>",
   "cluster_id": 1,
-  "timestamp": "2026-03-17T14:30:00Z"
+  "timestamp": "2026-04-04T14:30:00Z"
 }
 ```
 
-### 5. Agent 处理
+#### 5. Agent 处理
 
 - 分析错误原因（数据库连接失败）
 - 在 Daytona 沙箱中克隆代码
@@ -345,6 +609,33 @@ ERROR: Connection refused to 10.0.0.1:5432
 - 实施修复（添加配置文件）
 - 运行测试验证
 - 提交 PR
+
+### Web UI 模式 - 对话流程
+
+#### 1. 用户发送消息
+
+```json
+POST /chat/messages
+{
+  "conversation_id": "optional-uuid",
+  "message": "分析最近的错误日志"
+}
+```
+
+#### 2. 后端处理
+
+- 创建/获取对话记录
+- 发布 USER 事件到 Redis Stream
+- AgentWorker 消费事件
+- 调用 Agent 处理
+
+#### 3. Agent 响应
+
+- 分析问题
+- 执行操作
+- 发布 AGENT 事件
+- 前端通过 SSE 接收
+- 实时显示响应
 
 ## 故障排查
 
@@ -355,6 +646,12 @@ ERROR: Connection refused to 10.0.0.1:5432
 1. 确认 API 服务已启动：`curl http://127.0.0.1:7000/health`
 2. 如果 Vector 在 Docker 中，使用 `172.17.0.1` 代替 `127.0.0.1`
 3. 检查防火墙设置
+
+### Web UI 无法连接后端
+
+1. 确认 API 服务运行在正确端口
+2. 检查 CORS 配置
+3. 查看浏览器控制台错误
 
 ### Drain3 状态丢失
 
@@ -367,6 +664,13 @@ ERROR: Connection refused to 10.0.0.1:5432
 1. 检查 OpenAI API 配置
 2. 查看 Langfuse 追踪日志（如果启用）
 3. 启用详细日志：`LOG_LEVEL=DEBUG`
+4. 检查 Redis Stream 事件
+
+### SSE 事件流中断
+
+1. 检查 Redis 连接
+2. 确认消费者组状态
+3. 查看浏览器网络连接状态
 
 ## 贡献指南
 
@@ -383,10 +687,10 @@ ERROR: Connection refused to 10.0.0.1:5432
 
 ## 联系方式
 
-- 项目主页：https://github.com/thcpdd/auperator
-- 问题反馈：https://github.com/thcpdd/auperator/issues
-- 邮件联系：1834763300@qq.com
+- 项目主页：<https://github.com/thcpdd/auperator>
+- 问题反馈：<https://github.com/thcpdd/auperator/issues>
+- 邮件联系：<1834763300@qq.com>
 
----
+***
 
 <p align="center">Made with ❤️ by Auperator Team</p>
