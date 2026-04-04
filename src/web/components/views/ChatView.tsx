@@ -268,7 +268,7 @@ export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
                       自动监控日志、分析问题并提交修复
                     </p>
                     <div className="flex items-center justify-center text-sm text-foreground">
-                      {welcomeText}
+                      {typedText}
                       <span className="ml-1 inline-block w-0.5 h-4 bg-primary animate-pulse" />
                     </div>
                   </div>
