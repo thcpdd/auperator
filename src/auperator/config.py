@@ -153,6 +153,9 @@ class Settings(BaseSettings):
     # SQLite 配置
     sqlite_db_file: str = Field(default="auperator.db.sqlite3", alias="SQLITE_DB_FILE")
 
+    # Docker 日志流配置
+    monitored_container: str | None = Field(default=None, alias="MONITORED_CONTAINER")
+
     @field_validator("log_level")
     @classmethod
     def validate_log_level(cls, v: str) -> str:

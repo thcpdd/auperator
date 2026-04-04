@@ -90,3 +90,12 @@ export interface Event {
   timestamp: string;
   data: UserEventData | AgentEventData | ToolEventData | QueuedEventData;
 }
+
+// Docker Logs Types
+export interface DockerLogEntry {
+  container_name: string;
+  container_id: string;
+  timestamp: string;
+  log_line: string;
+  stream: "stdout" | "stderr";
+}

@@ -3,6 +3,7 @@
 提供 FastAPI 路由的依赖注入函数
 """
 
+import docker
 from fastapi import HTTPException, Depends, status
 from qdrant_client import AsyncQdrantClient
 from redis.asyncio import Redis as AsyncRedis
@@ -10,6 +11,33 @@ from redis.asyncio import Redis as AsyncRedis
 from auperator.services.memory_service import MemoryService
 from auperator.state import global_state
 from auperator.events import EventCenter
+
+
+# Docker客户端单例
+_docker_client = None
+
+
+def get_docker_client() -> docker.DockerClient:
+    """获取Docker客户端（依赖注入）
+
+    用于日志流功能的Docker客户端，独立于Agent工具
+
+    Returns:
+        Docker客户端实例
+
+    Raises:
+        HTTPException: 如果无法连接到Docker守护进程
+    """
+    global _docker_client
+    if _docker_client is None:
+        try:
+            _docker_client = docker.from_env()
+        except docker.errors.DockerException as e:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Cannot connect to Docker daemon: {str(e)}"
+            )
+    return _docker_client
 
 
 def get_redis_client() -> AsyncRedis:

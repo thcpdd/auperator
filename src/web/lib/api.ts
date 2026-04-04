@@ -5,6 +5,7 @@ import {
   ConversationHistory,
   RenameConversationRequest,
   DeleteConversationRequest,
+  DockerLogEntry,
 } from "./types";
 
 // Use Next.js proxy to avoid CORS
@@ -106,6 +107,111 @@ class APIClient {
     }
 
     return response.json();
+  }
+
+  // Docker Logs SSE
+  connectDockerLogs(
+    params: { since?: string; tail?: number | null },
+    onLog?: (log: DockerLogEntry) => void,
+    onError?: (error: Error) => void,
+    onComplete?: () => void
+  ): () => void {
+    let controller: AbortController | null = new AbortController();
+    let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+
+    const connect = async () => {
+      try {
+        // Connect directly to backend API
+        const url = `/api/events/docker-logs`;
+
+        const response = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Accept": "text/event-stream",
+          },
+          body: JSON.stringify({
+            since: params.since || "1h",
+            tail: params.tail || null,
+          }),
+          signal: controller!.signal,
+        });
+
+        if (!response.ok) {
+          throw new Error(`SSE connection failed: ${response.status} ${response.statusText}`);
+        }
+
+        reader = response.body?.getReader() || null;
+        if (!reader) {
+          throw new Error("Response body is null");
+        }
+
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+
+          if (done) {
+            onComplete?.();
+            break;
+          }
+
+          // Decode and process data
+          buffer += decoder.decode(value, { stream: true });
+
+          // Split by newline
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              const data = line.slice(6).trim();
+              if (data) {
+                try {
+                  const parsed: DockerLogEntry = JSON.parse(data);
+                  onLog?.(parsed);
+                } catch (e) {
+                  console.error("[Docker Logs] Failed to parse SSE data:", e, "Raw data:", data);
+                }
+              }
+            }
+          }
+        }
+      } catch (error) {
+        // Don't treat abort as an error (it's expected on cleanup)
+        if (error instanceof Error && error.name === "AbortError") {
+          return;
+        }
+        console.error("[Docker Logs] Connection error:", error);
+        onError?.(error as Error);
+      }
+    };
+
+    // Start connection (don't await)
+    connect().catch((error) => {
+      onError?.(error);
+    });
+
+    // Return cleanup function
+    return () => {
+      if (controller) {
+        try {
+          controller.abort();
+        } catch (e) {
+          if (e instanceof Error && e.name !== "AbortError") {
+            console.warn("[Docker Logs] Error during cleanup:", e);
+          }
+        }
+        controller = null;
+      }
+      if (reader) {
+        reader.cancel().catch(() => {
+          // Ignore cancel errors
+        });
+        reader = null;
+      }
+    };
   }
 
   // SSE Events (using Next.js API route to support streaming)

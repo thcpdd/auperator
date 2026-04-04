@@ -134,6 +134,17 @@
   html {
     @apply font-sans;
   }
+
+  /* Make all interactive shadcn/ui elements show pointer cursor */
+  [data-slot="select-item"],
+  [data-slot="dropdown-menu-item"],
+  [data-slot="dropdown-menu-checkbox-item"],
+  [data-slot="context-menu-item"],
+  [role="menuitem"],
+  [role="menuitemcheckbox"],
+  [role="option"] {
+    cursor: pointer !important;
+  }
 }
 
 /* Custom scrollbar styles */
