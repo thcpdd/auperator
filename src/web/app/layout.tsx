@@ -17,8 +17,8 @@ export const metadata: Metadata = {
   title: "Auperator - AI 超级运维智能体",
   description: "基于 AI 的运维智能体，自动监控和修复系统问题",
   icons: {
-    icon: "/favicon.png",
-    apple: "/favicon.png",
+    icon: "/favicon-r.png",
+    apple: "/favicon-r.png",
   },
 };
 
