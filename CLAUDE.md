@@ -6,9 +6,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Auperator (Automation Operator) is an intelligent AIOps Agent that automatically monitors web applications, collects logs, performs intelligent analysis, and fixes issues through PR submission.
 
-**Architecture**: Vector → HTTP API → Drain3 → Redis List → Agent
+**Architecture**: Vector → HTTP API → Drain3 → Redis List → Agent Handler → Agent
+
+**Dual Interface**:
+- **CLI**: Command-line interface for log consumption and auto-fix
+- **Web UI**: Next.js-based chat interface at [http://localhost:3000](http://localhost:3000)
 
 ## Build & Development Commands
+
+### Backend (Python)
 
 ```bash
 # Install dependencies and package
@@ -33,6 +39,35 @@ auperator server
 vector --config vector.yaml
 ```
 
+### Frontend (Next.js)
+
+```bash
+# Navigate to web directory
+cd src/web
+
+# Install dependencies
+npm install
+# or: pnpm install
+
+# Start development server
+npm run dev
+# or: pnpm dev
+
+# Build for production
+npm run build
+# or: pnpm build
+
+# Start production server
+npm start
+# or: pnpm start
+```
+
+The Web UI provides:
+- Real-time chat interface with the Agent
+- Conversation history management
+- SSE-based event streaming
+- Modern UI with shadcn/ui components
+
 ## Architecture
 
 ### High-Level Design
@@ -52,12 +87,23 @@ vector --config vector.yaml
 
 ### Data Flow
 
+**CLI Mode (Auto-fix)**:
 1. **Vector** captures Docker logs and performs multiline aggregation
 2. **Vector** filters errors based on keywords (error, exception, traceback, 5xx)
 3. **Vector** sends structured JSON to HTTP API `/vector/ingest`
 4. **HTTP API** uses Drain3 to extract log templates and deduplicate
 5. **API** pushes only new templates to Redis List
 6. **Agent Handler** consumes from Redis List and invokes Agent to fix issues
+
+**Web UI Mode (Interactive)**:
+1. User sends message via Web UI
+2. Frontend calls `POST /chat/messages`
+3. Backend creates conversation in SQLite
+4. Backend publishes USER event to Redis Stream
+5. AgentWorker consumes event and invokes Agent
+6. Agent publishes AGENT events to Redis Stream
+7. Frontend receives events via SSE endpoint `/events/web-ui`
+8. Frontend displays agent responses in real-time
 
 ### Core Components
 
@@ -78,11 +124,16 @@ vector --config vector.yaml
   - `/vector/ingest` - Receives logs from Vector
   - `/sandbox/*` - Daytona sandbox management
   - `/health` - Health check
+  - `/chat/*` - Chat API for conversational interface
+  - `/events/*` - SSE event streaming for web UI
+  - `/memory/*` - Memory management endpoints
 - Lifecycle management via `lifespan()` context manager
 - Services managed in `GlobalState`:
   - `Drain3Service` - Log template extraction and deduplication
   - `Redis client` - Async Redis operations
   - `DaytonaService` - Sandbox management
+  - `EventCenter` - Event publishing and consumption
+  - `AgentWorker` - Background agent task processing
 
 **Drain3 Service** (`src/auperator/services/drain3_service.py`):
 
@@ -102,12 +153,37 @@ vector --config vector.yaml
 - Builds prompts from error logs with context (container, timestamp, error message)
 - Streams agent output with `astream()` for real-time feedback
 
+**Event Handler** (`src/auperator/collector/handlers/event.py`):
+
+- Processes logs and publishes events to EventCenter
+- Creates conversation records in SQLite database
+- Generates user events for web UI consumption
+- Builds structured prompts from log entries
+- Integrates with the event-driven architecture
+
 **Dependencies** (`src/auperator/dependencies.py`):
 
-- FastAPI dependency injection for `Drain3Service` and `Redis client`
+- FastAPI dependency injection for `Drain3Service`, `Redis client`, `EventCenter`, and `AgentWorker`
 - `get_drain3_service()` - Returns Drain3Service from GlobalState
 - `get_redis_client()` - Returns async Redis client from GlobalState
+- `get_event_center()` - Returns EventCenter from GlobalState
+- `get_agent_worker()` - Returns AgentWorker from GlobalState
 - Used in route handlers via `Depends()`
+
+**Event Center** (`src/auperator/events/event_center.py`):
+
+- Manages event publishing to Redis Streams
+- Provides async event consumption with consumer groups
+- Supports multiple consumer types (web-ui, agent-worker, etc.)
+- Handles connection management and health checks
+- Event types: USER, AGENT, ERROR, STATUS
+
+**Database** (`src/auperator/database/`):
+
+- SQLite-based persistence for conversations
+- Async SQLAlchemy ORM with `Conversation` model
+- Thread-based conversation tracking
+- Supports conversation renaming and history
 
 ### Project Structure
 
@@ -123,7 +199,8 @@ src/auperator/
 │   ├── handlers/           # Log handlers
 │   │   ├── base.py         # Base handler interface
 │   │   ├── agent.py        # Agent handler (calls LangGraph)
-│   │   └── console.py      # Console handler (debug)
+│   │   ├── console.py      # Console handler (debug)
+│   │   └── event.py        # Event handler (publishes to EventCenter)
 │   └── vector_consumer.py  # Redis List consumer
 │
 ├── deepagents/             # Agent architecture
@@ -153,15 +230,40 @@ src/auperator/
 ├── schemas/                # Data models
 │   ├── vector.py           # Vector log models
 │   ├── daytona.py          # Daytona models
-│   └── log.py              # Log entry models (LogEntry, LogLevel)
+│   ├── log.py              # Log entry models (LogEntry, LogLevel)
+│   ├── event.py            # Event models
+│   ├── conversation.py     # Chat/conversation models
+│   └── memory.py           # Memory models
 │
 ├── services/               # Business services
 │   ├── drain3_service.py   # Drain3 wrapper
 │   └── daytona_service.py  # Daytona sandbox service
 │
+├── events/                 # Event system
+│   ├── event_center.py     # Event publishing and consumption
+│   └── __init__.py
+│
+├── database/               # Database layer
+│   ├── db.py               # Database session management
+│   ├── models.py           # SQLAlchemy models
+│   └── base.py             # Base database classes
+│
 └── routes/                 # FastAPI routes
     ├── vector.py           # Vector log ingestion
-    └── daytona.py          # Sandbox management
+    ├── daytona.py          # Sandbox management
+    ├── chat.py             # Chat API
+    ├── events.py           # SSE event streaming
+    └── memory.py           # Memory management
+
+src/web/                    # Next.js Web UI
+├── app/                    # Next.js app directory
+│   ├── page.tsx            # Main page
+│   ├── layout.tsx          # Root layout
+│   ├── globals.css         # Global styles
+│   └── api/                # API routes
+├── components/             # React components
+├── lib/                    # Utility libraries
+└── package.json            # Frontend dependencies
 ```
 
 ## Configuration
@@ -214,6 +316,32 @@ Configuration is loaded from `.env` file. Key options:
 - `REMOTE_REPO_URL`: Remote repository URL
 - `GITHUB_TOKEN`: GitHub token for PR creation
 
+### Embedding Configuration
+
+- `EMBEDDING_API_BASE_URL`: Embedding API base URL (default: https://api.openai.com/v1)
+- `EMBEDDING_API_KEY`: Embedding API key
+- `EMBEDDING_MODEL`: Embedding model name (default: text-embedding-3-small)
+- `EMBEDDING_VECTOR_SIZE`: Vector dimension size (must match model, default: 1536)
+
+### SQLite Configuration
+
+- `SQLITE_DB_FILE`: SQLite database file name (default: auperator.db.sqlite3)
+
+### Consumer Configuration
+
+- `CONSUMER_BATCH_SIZE`: Batch size for consuming messages (default: 1)
+- `CONSUMER_BLOCK_TIMEOUT`: Blocking timeout in seconds (default: 5)
+
+### Qdrant Configuration
+
+- `QDRANT_URL`: Qdrant service URL (default: http://localhost:6333)
+- `QDRANT_API_KEY`: Qdrant API key (optional)
+- `QDRANT_COLLECTION`: Collection name (default: auperator_memories)
+
+### Event Stream Configuration
+
+- `REDIS_EVENT_STREAM`: Redis stream name for events (default: events:all)
+
 ## Vector Configuration
 
 **Key features in** **`vector.yaml`**:
@@ -259,6 +387,59 @@ When Drain3 processes a log:
 
 Only logs with `is_new_template: true` are pushed to Redis List.
 
+## Event System Architecture
+
+### Redis Streams
+
+The event system uses Redis Streams for real-time event distribution:
+
+**Stream Key**: `auperator:events:all`
+
+**Event Types**:
+- `USER` - User input/messages
+- `AGENT` - Agent responses/actions
+- `ERROR` - Error events
+- `STATUS` - Status updates
+
+**Event Structure**:
+```json
+{
+  "event_id": "uuid",
+  "thread_id": "conversation_uuid",
+  "event_type": "USER|AGENT|ERROR|STATUS",
+  "content": "event content",
+  "metadata": {},
+  "timestamp": "2026-03-17T14:30:00Z"
+}
+```
+
+**Consumer Groups**:
+- `web-ui` - Web UI SSE stream
+- `agent-worker` - Background agent processing
+
+### SSE Endpoint
+
+**Route**: `POST /events/web-ui`
+
+**Request Body**:
+```json
+{
+  "thread_id": "optional-filter-thread-id"
+}
+```
+
+**Response**: Server-Sent Events stream with event data
+
+### Event Flow
+
+1. **EventHandler** receives log from Redis List
+2. Creates conversation in SQLite database
+3. Publishes USER event to Redis Stream
+4. **AgentWorker** consumes event
+5. Invokes Agent to process
+6. Publishes AGENT events with responses
+7. **Web UI** consumes events via SSE
+
 ## Extending the System
 
 **Add a new Vector source**: Edit `vector.yaml` and add new sources/transforms
@@ -268,6 +449,16 @@ Only logs with `is_new_template: true` are pushed to Redis List.
 **Add a new service**: Create in `services/` and initialize in `GlobalState.initialize_all()`
 
 **Add a new Agent tool**: Create a function decorated with `@tool` in `deepagents/tools/` and include it in the `get_tools()` function
+
+**Add a new API route**: Create in `routes/` and register in `server.py`
+
+**Add a new event type**: Add to `EventType` enum in `schemas/event.py`
+
+**Add web UI components**:
+- React components go in `src/web/components/`
+- Pages go in `src/web/app/`
+- API routes go in `src/web/app/api/`
+- Uses shadcn/ui for component library
 
 ## DeepAgents Architecture
 
@@ -349,6 +540,30 @@ DeepAgents supports specialized subagents:
 - Main agent can spawn subagents via the `task` tool
 - General-purpose subagent is created automatically with default middleware
 
+### Agent Worker
+
+**AgentWorker** (`deepagents/worker.py`):
+- Background task processor for Agent execution
+- Listens to Redis Streams for USER events
+- Manages agent lifecycle and checkpointer
+- Provides conversation history retrieval
+- Langfuse integration for tracing
+- Stream events back to EventCenter
+
+**Key Features**:
+- AsyncSqliteSaver for checkpoint persistence
+- Thread-based conversation management
+- Real-time event streaming
+- Error handling and recovery
+
+### Checkpointer & State Management
+
+- Uses **LangGraph AsyncSqliteSaver** for state persistence
+- Checkpoint file: `auperator.db.sqlite3`
+- Maintains conversation state across restarts
+- Thread-based conversation isolation
+- Supports conversation history retrieval
+
 ## 配置文件修改
 
 如果你需要修改配置文件，那么你通常需要修改两个文件：
@@ -382,4 +597,85 @@ redis-cli LLEN auperator:logs:main
 # 查看Drain3学习到的模板
 cat drain3.json | jq '.clusters[] | {cluster_id, template}'
 ```
+
+## Development Workflows
+
+### Full Stack Development
+
+To run both backend and frontend:
+
+```bash
+# Terminal 1: Start API server
+auperator server
+
+# Terminal 2: Start Vector (for log collection)
+vector --config vector.yaml
+
+# Terminal 3: Start Web UI
+cd src/web && npm run dev
+```
+
+### Debugging Event Flow
+
+```bash
+# View Redis Stream events
+redis-cli XRANGE auperator:events:all - +
+
+# View consumer groups
+redis-cli XINFO GROUPS auperator:events:all
+
+# View consumers in a group
+redis-cli XINFO CONSUMERS auperator:events:all agent-worker
+
+# View conversation history in SQLite
+sqlite3 auperator.db.sqlite3 "SELECT id, thread_id, title, created_at FROM conversations;"
+```
+
+### Testing Web UI Integration
+
+1. Start all services (API, Vector, Web UI)
+2. Open http://localhost:3000
+3. Send a message through the chat interface
+4. Monitor events:
+   - Check browser Network tab for SSE connection
+   - Check backend logs for event publishing
+   - Verify Redis Stream receives events
+
+### Monitoring Agent Execution
+
+```bash
+# Enable Langfuse tracing
+auperator start --enable-langfuse
+
+# View agent checkpoints
+sqlite3 auperator.db.sqlite3 "SELECT * FROM checkpoints;"
+
+# Monitor event stream
+redis-cli XREAD STREAMS auperator:events:all $
+```
+
+## Frontend Development
+
+### Tech Stack
+
+- **Framework**: Next.js 16 with App Router
+- **UI Library**: shadcn/ui + Radix UI
+- **Styling**: Tailwind CSS 4
+- **State Management**: React hooks + SSE for real-time updates
+- **Components**: Custom components in `src/web/components/`
+
+### Key Components
+
+- **Chat Interface**: Real-time chat with streaming responses
+- **Conversation List**: Sidebar with conversation history
+- **Event Streaming**: SSE-based real-time updates
+- **Markdown Rendering**: React Markdown with syntax highlighting
+
+### Adding New Features
+
+1. **New API Route**: Create in `src/web/app/api/`
+2. **New Page**: Create in `src/web/app/`
+3. **New Component**: Create in `src/web/components/`
+4. **Styling**: Use Tailwind CSS utility classes
+5. **UI Components**: Use shadcn/ui components
 
