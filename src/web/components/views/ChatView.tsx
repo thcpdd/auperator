@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Plus, MessageSquare, MoreHorizontal, ChevronRight, ChevronLeft, Pencil, Trash2, Check, Loader2, Square, Activity, ScrollText, Settings } from "lucide-react";
+import { Send, Plus, MoreHorizontal, ChevronRight, ChevronLeft, Pencil, Trash2, Check, Loader2, Square, Activity, ScrollText, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -350,13 +350,13 @@ export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
             )}
 
             <div className="flex items-end gap-3">
-              <div className="flex-1 relative">
+              <div className="flex-1 relative flex items-end">
                 <Textarea
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder="输入消息... (Enter 发送, Shift+Enter 换行)"
-                  className="min-h-[60px] max-h-[200px] resize-none
+                  className="min-h-[75px] max-h-[200px] resize-none pr-28
                     border border-border/40
                     bg-muted/30
                     rounded-xl
@@ -370,68 +370,65 @@ export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
                     hover:bg-muted/40
                     hover:shadow-[0_4px_12px_-2px_rgba(0,0,0,0.10)]"
                 />
-              </div>
 
-              {isLoading ? (
-                <div className="flex gap-2">
-                  {/* Queue Button */}
-                  <Button
-                    onClick={handleSend}
-                    disabled={!input.trim()}
-                    size="icon"
-                    className="h-[60px] w-[60px] shrink-0
-                      rounded-2xl
-                      bg-gradient-to-br from-primary to-primary/90
-                      shadow-lg shadow-primary/30
-                      hover:shadow-xl hover:shadow-primary/40
-                      hover:scale-105
-                      active:scale-95
-                      transition-all duration-200
-                      disabled:opacity-40 disabled:hover:scale-100"
-                    title="发送到队列"
-                  >
-                    <Send className="h-5 w-5" />
-                  </Button>
+                {/* Integrated Button Container */}
+                <div className="absolute right-2 bottom-2 flex gap-1.5">
+                  {isLoading ? (
+                    <>
+                      {/* Queue Button */}
+                      <Button
+                        onClick={handleSend}
+                        disabled={!input.trim()}
+                        size="sm"
+                        className="h-9 w-9
+                          rounded-lg
+                          bg-primary/90 hover:bg-primary
+                          shadow-sm
+                          hover:shadow-md
+                          transition-all duration-200
+                          disabled:opacity-40"
+                        title="发送到队列"
+                      >
+                        <Send className="h-4 w-4" />
+                      </Button>
 
-                  {/* Stop Button */}
-                  <Button
-                    onClick={handleStop}
-                    size="icon"
-                    className="h-[60px] w-[60px] shrink-0
-                      rounded-2xl
-                      bg-gradient-to-br from-destructive to-destructive/90
-                      shadow-lg shadow-destructive/30
-                      hover:shadow-xl hover:shadow-destructive/40
-                      hover:scale-105
-                      active:scale-95
-                      transition-all duration-200"
-                    title="停止执行并清空队列"
-                  >
-                    <Square className="h-5 w-5" />
-                  </Button>
-                </div>
-              ) : (
-                <Button
-                  onClick={handleSend}
-                  disabled={!input.trim()}
-                  size="icon"
-                  className="h-[60px] w-[60px] shrink-0
-                    rounded-2xl
-                    bg-gradient-to-br from-primary to-primary/90
-                    shadow-lg shadow-primary/30
-                    hover:shadow-xl hover:shadow-primary/40
-                    hover:scale-105
-                    active:scale-95
-                    transition-all duration-200
-                    disabled:opacity-40 disabled:hover:scale-100"
-                >
-                  {isSending ? (
-                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent"></div>
+                      {/* Stop Button */}
+                      <Button
+                        onClick={handleStop}
+                        size="sm"
+                        className="h-9 w-9
+                          rounded-lg
+                          bg-destructive/90 hover:bg-destructive
+                          shadow-sm
+                          hover:shadow-md
+                          transition-all duration-200"
+                        title="停止执行并清空队列"
+                      >
+                        <Square className="h-4 w-4" />
+                      </Button>
+                    </>
                   ) : (
-                    <Send className="h-5 w-5" />
+                    <Button
+                      onClick={handleSend}
+                      disabled={!input.trim()}
+                      size="sm"
+                      className="h-9 w-9
+                        rounded-lg
+                        bg-primary/90 hover:bg-primary
+                        shadow-sm
+                        hover:shadow-md
+                        transition-all duration-200
+                        disabled:opacity-40"
+                    >
+                      {isSending ? (
+                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent"></div>
+                      ) : (
+                        <Send className="h-4 w-4" />
+                      )}
+                    </Button>
                   )}
-                </Button>
-              )}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -473,8 +470,8 @@ export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
           <div className="space-y-2">
             {conversations.length > 0 && (
               <>
-                <div className="px-3 py-2 text-xs font-medium text-muted-foreground">
-                  历史会话 ({conversations.length})
+                <div className="px-3 py-2 text-xs font-semibold text-muted-foreground/60 uppercase tracking-wider">
+                  历史消息 ({conversations.length})
                 </div>
                 <div className="space-y-1">
                   {displayedConversations.map((conv) => (
@@ -495,7 +492,6 @@ export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
                         }}
                         className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-left"
                       >
-                        <MessageSquare className="h-4 w-4 shrink-0" />
                         <span className="max-w-[200px] truncate font-medium">
                           {conv.title}
                         </span>
