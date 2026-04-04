@@ -247,8 +247,8 @@ export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
                   {/* Icon with glow effect */}
                   <div className="relative inline-block">
                     <div className="absolute inset-0 bg-primary/20 blur-3xl rounded-full" />
-                    <div className="relative bg-gradient-to-br from-primary to-primary/80 p-6 rounded-2xl shadow-2xl shadow-primary/20 animate-in fade-in zoom-in duration-700">
-                      <MessageSquare className="h-12 w-12 text-primary-foreground" />
+                    <div className="relative animate-in fade-in zoom-in duration-700">
+                      <img src="/logo-800.png" alt="Auperator" className="h-25 w-25 rounded-xl" />
                     </div>
                   </div>
 
@@ -349,42 +349,81 @@ export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
               </div>
             )}
 
-            <div className="flex items-end gap-2">
-              <Textarea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="输入消息... (Enter 发送, Shift+Enter 换行)"
-                className="min-h-[60px] max-h-[200px] resize-none"
-              />
+            <div className="flex items-end gap-3">
+              <div className="flex-1 relative">
+                <Textarea
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="输入消息... (Enter 发送, Shift+Enter 换行)"
+                  className="min-h-[60px] max-h-[200px] resize-none
+                    border border-border/40
+                    bg-muted/30
+                    rounded-xl
+                    shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08)]
+                    placeholder:text-muted-foreground/50
+                    focus:border-primary/50
+                    focus:ring-4 focus:ring-primary/10
+                    focus:bg-background
+                    focus:shadow-[0_4px_16px_-2px_rgba(0,0,0,0.12)]
+                    transition-all duration-200 ease-out
+                    hover:bg-muted/40
+                    hover:shadow-[0_4px_12px_-2px_rgba(0,0,0,0.10)]"
+                />
+              </div>
+
               {isLoading ? (
-                <>
-                  {/* Send Button (for queuing) */}
+                <div className="flex gap-2">
+                  {/* Queue Button */}
                   <Button
                     onClick={handleSend}
                     disabled={!input.trim()}
                     size="icon"
-                    className="h-[60px] w-[60px] shrink-0"
+                    className="h-[60px] w-[60px] shrink-0
+                      rounded-2xl
+                      bg-gradient-to-br from-primary to-primary/90
+                      shadow-lg shadow-primary/30
+                      hover:shadow-xl hover:shadow-primary/40
+                      hover:scale-105
+                      active:scale-95
+                      transition-all duration-200
+                      disabled:opacity-40 disabled:hover:scale-100"
                     title="发送到队列"
                   >
                     <Send className="h-5 w-5" />
                   </Button>
+
                   {/* Stop Button */}
                   <Button
                     onClick={handleStop}
                     size="icon"
-                    className="h-[60px] w-[60px] shrink-0 bg-destructive hover:bg-destructive/90"
+                    className="h-[60px] w-[60px] shrink-0
+                      rounded-2xl
+                      bg-gradient-to-br from-destructive to-destructive/90
+                      shadow-lg shadow-destructive/30
+                      hover:shadow-xl hover:shadow-destructive/40
+                      hover:scale-105
+                      active:scale-95
+                      transition-all duration-200"
                     title="停止执行并清空队列"
                   >
                     <Square className="h-5 w-5" />
                   </Button>
-                </>
+                </div>
               ) : (
                 <Button
                   onClick={handleSend}
                   disabled={!input.trim()}
                   size="icon"
-                  className="h-[60px] w-[60px] shrink-0"
+                  className="h-[60px] w-[60px] shrink-0
+                    rounded-2xl
+                    bg-gradient-to-br from-primary to-primary/90
+                    shadow-lg shadow-primary/30
+                    hover:shadow-xl hover:shadow-primary/40
+                    hover:scale-105
+                    active:scale-95
+                    transition-all duration-200
+                    disabled:opacity-40 disabled:hover:scale-100"
                 >
                   {isSending ? (
                     <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent"></div>
@@ -413,7 +452,7 @@ export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
             onClick={handleNewChat}
           >
             <Plus className="h-4 w-4" />
-            新对话
+            创建对话
           </Button>
           <Button
             variant="ghost"

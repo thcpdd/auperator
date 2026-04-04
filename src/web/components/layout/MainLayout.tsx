@@ -28,7 +28,6 @@ export function MainLayout({ children, defaultView = "chat", onViewChange }: Mai
   return (
     <div className="flex h-screen flex-col overflow-hidden">
       <Header
-        currentView={currentView}
         onMenuClick={() => setMobileMenuOpen(!mobileMenuOpen)}
       />
 

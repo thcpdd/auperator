@@ -13,8 +13,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Auperator - AI Operations Automation",
-  description: "Intelligent AIOps Agent for automatic monitoring and issue fixing",
+  title: "Auperator - AI 超级运维智能体",
+  description: "基于 AI 的运维智能体，自动监控和修复系统问题",
+  icons: {
+    icon: "/favicon.png",
+    apple: "/favicon.png",
+  },
 };
 
 export default function RootLayout({
