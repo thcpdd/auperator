@@ -109,6 +109,10 @@ class APIClient {
     return response.json();
   }
 
+  async checkHealth(): Promise<{ status: string; service: string }> {
+    return this.request<{ status: string; service: string }>("/health");
+  }
+
   // Docker Logs SSE
   connectDockerLogs(
     params: { since?: string; tail?: number | null },
