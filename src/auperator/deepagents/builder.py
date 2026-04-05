@@ -38,6 +38,7 @@ from .middleware.subagents import (
 )
 from .middleware.summarization import create_summarization_middleware
 from .prompts.system import SYSTEM_PROMPT as BASE_AGENT_PROMPT
+from .state import AuperatorState
 
 
 def get_default_model() -> ChatOpenAI:
@@ -303,6 +304,7 @@ def create_deep_agent(  # noqa: C901, PLR0912  # Complex graph assembly logic wi
         middleware=deepagent_middleware,
         response_format=response_format,
         context_schema=context_schema,
+        state_schema=AuperatorState,
         checkpointer=checkpointer,
         store=store,
         debug=debug,
