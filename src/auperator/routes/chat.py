@@ -1,8 +1,9 @@
 """聊天 API 路由"""
 
 import logging
-from typing import List
+from typing import List, Any
 
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func
 from fastapi import APIRouter, Depends, HTTPException, status, Body
@@ -21,6 +22,122 @@ from auperator.deepagents import AgentWorker
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+
+
+def format_messages_with_subagents(
+    messages: list[Any],
+    subagent_messages: list[dict],
+) -> list[dict]:
+    """格式化消息列表，合并主 agent 和 subagent 的消息
+
+    Args:
+        messages: 主 agent 的消息列表
+        subagent_messages: 子 agent 的执行记录
+
+    Returns:
+        格式化后的消息列表
+    """
+    formatted_messages = []
+    pending_tool_calls = {}  # 记录待合并的工具调用 {tool_call_id: tool_call_data}
+
+    # 创建 subagent 查找字典 {tool_call_id: subagent_data}
+    subagent_map = {
+        msg["tool_call_id"]: msg
+        for msg in subagent_messages
+    }
+
+    for msg in messages:
+        msg_type = msg.type if hasattr(msg, "type") else msg.__class__.__name__
+
+        # 处理 AIMessage
+        if msg_type == "ai":
+            content = msg.content if hasattr(msg, "content") else ""
+
+            # 如果有 content，先添加 AI 文本消息
+            if content:
+                formatted_messages.append({
+                    "type": "ai",
+                    "content": content,
+                })
+
+            # 如果有工具调用，记录下来等待 ToolMessage
+            if hasattr(msg, "tool_calls") and msg.tool_calls:
+                for tool_call in msg.tool_calls:
+                    tool_call_id = tool_call.get("id")
+                    tool_name = tool_call.get("name")
+
+                    if tool_call_id:
+                        # 检查是否是子 agent 调用
+                        is_subagent_call = tool_name == "task"
+
+                        # 如果是子 agent 调用，记录但不添加到 formatted_messages
+                        # 因为子 agent 的消息会直接插入
+                        if is_subagent_call and tool_call_id in subagent_map:
+                            pending_tool_calls[tool_call_id] = {
+                                "type": "tool",
+                                "name": tool_name,
+                                "args": tool_call.get("args", {}),
+                                "is_subagent_call": is_subagent_call,
+                            }
+                        else:
+                            # 普通工具调用，按现有逻辑处理
+                            tool_data = {
+                                "type": "tool",
+                                "name": tool_name,
+                                "args": tool_call.get("args", {}),
+                                "is_subagent_call": False,
+                            }
+                            pending_tool_calls[tool_call_id] = tool_data
+
+        # 处理 ToolMessage（工具调用结果）
+        elif msg_type == "tool":
+            tool_call_id = getattr(msg, "tool_call_id", None)
+
+            if tool_call_id and tool_call_id in pending_tool_calls:
+                tool_data = pending_tool_calls.pop(tool_call_id)
+                is_subagent_call = tool_data.get("is_subagent_call", False)
+
+                # 如果是子 agent 调用，先插入子 agent 的消息
+                if is_subagent_call and tool_call_id in subagent_map:
+                    subagent_data = subagent_map[tool_call_id]
+                    subagent_name = subagent_data.get("subagent_name", "")
+                    subagent_msg_list = subagent_data.get("messages", [])
+
+                    # 递归格式化子 agent 的消息
+                    formatted_subagent_messages = format_messages_with_subagents(
+                        subagent_msg_list,
+                        []  # 子 agent 的消息不再包含子 subagent
+                    )
+
+                    # 为每个子 agent 消息添加 subagent_name 标识
+                    for sub_msg in formatted_subagent_messages:
+                        sub_msg["subagent_name"] = subagent_name
+                        formatted_messages.append(sub_msg)
+
+                    # ⚠️ 注意：不添加 task 工具调用和结果到 formatted_messages
+                    # 因为子 agent 的消息已经包含了所有信息
+                else:
+                    # 普通工具调用，添加工具调用和结果
+                    tool_data["content"] = msg.content if hasattr(msg, "content") else str(msg)
+                    formatted_messages.append(tool_data)
+
+        # 处理 HumanMessage
+        elif msg_type == "human":
+            content = msg.content if hasattr(msg, "content") else str(msg)
+            formatted_messages.append({
+                "type": "human",
+                "content": content,
+            })
+
+        # 其他类型消息
+        else:
+            content = msg.content if hasattr(msg, "content") else str(msg)
+            formatted_messages.append({
+                "type": msg_type,
+                "content": content,
+            })
+
+    return formatted_messages
 
 
 @router.post("/messages", status_code=status.HTTP_200_OK)
@@ -127,65 +244,14 @@ async def get_conversation(
         agent_worker: Agent Worker
 
     Returns:
-        dict: 包含消息历史的响应
+        dict: 包含消息历史的响应（包含主 agent 和 subagent 的消息）
     """
     try:
         # 从 agent_worker 获取消息历史
-        messages = await agent_worker.get_history(thread_id)
+        messages, subagent_messages = await agent_worker.get_history(thread_id)
 
-        # 格式化消息
-        formatted_messages = []
-        pending_tool_calls = {}  # 记录待合并的工具调用 {tool_call_id: tool_call_data}
-
-        for msg in messages:
-            msg_type = msg.type if hasattr(msg, "type") else msg.__class__.__name__
-
-            # 处理 AIMessage
-            if msg_type == "ai":
-                content = msg.content if hasattr(msg, "content") else ""
-
-                # 如果有 content，先添加 AI 文本消息
-                if content:
-                    formatted_messages.append({
-                        "type": "ai",
-                        "content": content,
-                    })
-
-                # 如果有工具调用，记录下来等待 ToolMessage
-                if hasattr(msg, "tool_calls") and msg.tool_calls:
-                    for tool_call in msg.tool_calls:
-                        tool_call_id = tool_call.get("id")
-                        if tool_call_id:
-                            pending_tool_calls[tool_call_id] = {
-                                "type": "tool",
-                                "name": tool_call.get("name"),
-                                "args": tool_call.get("args", {}),
-                            }
-
-            # 处理 ToolMessage（工具调用结果）
-            elif msg_type == "tool":
-                tool_call_id = getattr(msg, "tool_call_id", None)
-                if tool_call_id and tool_call_id in pending_tool_calls:
-                    # 合并工具调用和结果
-                    tool_data = pending_tool_calls.pop(tool_call_id)
-                    tool_data["content"] = msg.content if hasattr(msg, "content") else str(msg)
-                    formatted_messages.append(tool_data)
-
-            # 处理 HumanMessage
-            elif msg_type == "human":
-                content = msg.content if hasattr(msg, "content") else str(msg)
-                formatted_messages.append({
-                    "type": "human",
-                    "content": content,
-                })
-
-            # 其他类型消息
-            else:
-                content = msg.content if hasattr(msg, "content") else str(msg)
-                formatted_messages.append({
-                    "type": msg_type,
-                    "content": content,
-                })
+        # 格式化消息（合并主 agent 和 subagent 的消息）
+        formatted_messages = format_messages_with_subagents(messages, subagent_messages)
 
         return {
             "thread_id": thread_id,

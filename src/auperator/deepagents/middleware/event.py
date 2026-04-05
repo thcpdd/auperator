@@ -204,10 +204,15 @@ class EventAutoSendMiddleware(AgentMiddleware[AgentState, ContextT, ResponseT]):
         Returns:
             The tool message or command from the handler.
         """
+        tool_name = request.tool_call.get("name", "")
+        # ⚠️ 如果是 task 工具调用（调用子 agent），不发送事件
+        # 因为子 agent 会通过自己的 EventAutoSendMiddleware 发送事件
+        if tool_name == "task":
+            return await handler(request)
+
         # Get thread_id from config
         thread_id = self._get_thread_id()
         # Extract tool call info
-        tool_name = request.tool_call.get("name", "")
         tool_args = request.tool_call.get("args", {})
 
         # 生成唯一的 event_id，用于关联工具调用和结果

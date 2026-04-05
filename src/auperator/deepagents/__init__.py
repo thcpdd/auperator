@@ -1,6 +1,6 @@
 """Deep Agents package."""
 
-from .builder import create_deep_agent as create_auperator
+from .builder import create_auperator
 from .middleware.filesystem import FilesystemMiddleware
 from .middleware.memory import MemoryMiddleware
 from .middleware.subagents import CompiledSubAgent, SubAgent, SubAgentMiddleware

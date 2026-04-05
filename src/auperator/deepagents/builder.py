@@ -38,6 +38,11 @@ from .middleware.subagents import (
 )
 from .middleware.summarization import create_summarization_middleware
 from .prompts.system import SYSTEM_PROMPT as BASE_AGENT_PROMPT
+from .prompts.log_analysis import LOG_ANALYSIS_PROMPT
+from .prompts.fix import FIX_PROMPT
+from .prompts.validation import VALIDATION_PROMPT
+from .prompts.pr import PR_PROMPT
+from .tools.registry import ToolRegistry
 from .state import AuperatorState
 
 
@@ -219,6 +224,9 @@ def create_deep_agent(  # noqa: C901, PLR0912  # Complex graph assembly logic wi
         "middleware": gp_middleware,
     }
 
+    # Create event auto send middleware
+    event_auto_send_middleware = EventAutoSendMiddleware()
+
     # Process user-provided subagents to fill in defaults for model, tools, and middleware
     processed_subagents: list[SubAgent | CompiledSubAgent] = []
     for spec in subagents or []:
@@ -236,6 +244,7 @@ def create_deep_agent(  # noqa: C901, PLR0912  # Complex graph assembly logic wi
                 FilesystemMiddleware(backend=backend),
                 create_summarization_middleware(subagent_model, backend),
                 PatchToolCallsMiddleware(),
+                event_auto_send_middleware,
             ]
             subagent_skills = spec.get("skills")
             if subagent_skills:
@@ -256,7 +265,7 @@ def create_deep_agent(  # noqa: C901, PLR0912  # Complex graph assembly logic wi
     # Build main agent middleware stack
     deepagent_middleware: list[AgentMiddleware[Any, Any, Any]] = [
         TodoListMiddleware(),
-        EventAutoSendMiddleware(),
+        event_auto_send_middleware,
     ]
 
     # Resolve memory: default to AUPERATOR.md if not specified
@@ -311,3 +320,79 @@ def create_deep_agent(  # noqa: C901, PLR0912  # Complex graph assembly logic wi
         name=name,
         cache=cache,
     ).with_config({"recursion_limit": 1000})
+
+
+def create_auperator(
+    *,
+    model: str | BaseChatModel | None = None,
+    checkpointer: Checkpointer | None = None,
+    store: BaseStore | None = None,
+    cache: BaseCache | None = None,
+    debug: bool = False,
+    **kwargs,
+) -> CompiledStateGraph:
+    """创建 Auperator 多 Agent 系统.
+
+    Auperator 是一个智能的 AIOps 系统，包含主 Agent 和 4 个专门的子 Agent：
+    - log_analysis: 日志分析专家
+    - fix: 代码修复专家
+    - validation: 验证专家
+    - pr: PR 管理专家
+
+    Args:
+        model: 模型配置（模型名称或模型实例）
+        checkpointer: Checkpointer 实例，用于持久化状态
+        store: Store 实例，用于持久化存储
+        cache: Cache 实例，用于缓存
+        debug: 是否启用调试模式
+
+    Returns:
+        配置好的多 Agent 系统
+    """
+    # 解析模型
+    model = get_default_model() if model is None else resolve_model(model)
+
+    # 通过 ToolRegistry 获取所有工具
+    subagent_tools = ToolRegistry.get_all()
+
+    # 定义子 Agent
+    subagents: list[SubAgent] = [
+        {
+            "name": "log_analysis",
+            "description": "分析错误日志、收集上下文、分类错误类型、评估严重程度、生成错误分析报告",
+            "system_prompt": LOG_ANALYSIS_PROMPT,
+            "model": model,
+            "tools": subagent_tools,  # log_analysis 使用所有工具
+        },
+        {
+            "name": "fix",
+            "description": "根据错误分析报告定位问题代码、实施安全有效的修复、生成修复说明",
+            "system_prompt": FIX_PROMPT,
+            "model": model,
+            "tools": subagent_tools,  # fix 使用所有工具
+        },
+        {
+            "name": "validation",
+            "description": "运行测试套件、验证修复效果、检测回归问题、评估修复质量",
+            "system_prompt": VALIDATION_PROMPT,
+            "model": model,
+            "tools": subagent_tools,  # validation 使用所有工具
+        },
+        {
+            "name": "pr",
+            "description": "生成 PR 描述、创建有意义的 PR 标题、创建 Pull Request",
+            "system_prompt": PR_PROMPT,
+            "model": model,
+            "tools": ToolRegistry.get("pr"),  # pr 只使用 PR 相关工具
+        },
+    ]
+
+    return create_deep_agent(
+        model=model,
+        subagents=subagents,
+        checkpointer=checkpointer,
+        store=store,
+        debug=debug,
+        cache=cache,
+        **kwargs
+    )

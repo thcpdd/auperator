@@ -128,8 +128,11 @@ class AgentWorker:
             raise RuntimeError("Agent not initialized. Call initialize() first.")
 
         state = await self.agent.aget_state({"configurable": {"thread_id": thread_id}})
+
+        subagent_messages = state.values.get("subagent_messages", [])
         messages = state.values.get("messages", [])
-        return messages
+
+        return messages, subagent_messages
 
     def get_queue_status(self, thread_id: str) -> dict | None:
         """获取队列状态

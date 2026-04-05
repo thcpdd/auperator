@@ -443,7 +443,24 @@ def _build_task_tool(  # noqa: C901
             raise ValueError(value_error_msg)
         subagent, subagent_state = _validate_and_prepare_state(subagent_type, description, runtime)
         result = subagent.invoke(subagent_state)
-        return _return_command_with_state_update(result, runtime.tool_call_id)
+        
+        # 提取子 agent 的中间消息（去掉第一条 HumanMessage 和最后一条 AIMessage）
+        intermediate_messages = result["messages"][1: -1] if len(result["messages"]) > 2 else []
+
+        # 构建执行记录
+        execution = {
+            "tool_call_id": runtime.tool_call_id,
+            "subagent_name": subagent_type,
+            "messages": intermediate_messages
+        }
+
+        # 获取基础命令
+        command = _return_command_with_state_update(result, runtime.tool_call_id)
+
+        # 添加 subagent_messages 到 state update，使用 reducer 自动追加到现有列表
+        command.update["subagent_messages"] = [execution]
+
+        return command
 
     async def atask(
         description: Annotated[
@@ -461,7 +478,24 @@ def _build_task_tool(  # noqa: C901
             raise ValueError(value_error_msg)
         subagent, subagent_state = _validate_and_prepare_state(subagent_type, description, runtime)
         result = await subagent.ainvoke(subagent_state)
-        return _return_command_with_state_update(result, runtime.tool_call_id)
+
+        # 提取子 agent 的中间消息（去掉第一条 HumanMessage 和最后一条 AIMessage）
+        intermediate_messages = result["messages"][1: -1] if len(result["messages"]) > 2 else []
+
+        # 构建执行记录
+        execution = {
+            "tool_call_id": runtime.tool_call_id,
+            "subagent_name": subagent_type,
+            "messages": intermediate_messages
+        }
+
+        # 获取基础命令
+        command = _return_command_with_state_update(result, runtime.tool_call_id)
+
+        # 添加 subagent_messages 到 state update，使用 reducer 自动追加到现有列表
+        command.update["subagent_messages"] = [execution]
+
+        return command
 
     return StructuredTool.from_function(
         name="task",
