@@ -72,6 +72,7 @@ export function useChat({ initialThreadId, onEvent, onSendingComplete, onNewConv
           timestamp: msg.timestamp || new Date().toISOString(),
           toolName: msg.name,
           toolArgs: msg.args,
+          agentName: msg.agent_name,
         };
 
         // For tool messages from history, set appropriate flags
@@ -252,6 +253,7 @@ export function useChat({ initialThreadId, onEvent, onSendingComplete, onNewConv
             role: "assistant",
             content: data.content,
             timestamp: event.timestamp,
+            agentName: data.agent_name,
           };
           setMessages((prev) => [...prev, assistantMessage]);
         }
@@ -295,6 +297,7 @@ export function useChat({ initialThreadId, onEvent, onSendingComplete, onNewConv
             toolArgs: data.args,
             isToolComplete: false,
             eventId: event.event_id, // Store event_id to match with result
+            agentName: data.agent_name,
           };
           setMessages((prev) => [...prev, toolMessage]);
         }

@@ -40,6 +40,7 @@ export interface Message {
   toolOutput?: string; // Tool execution result
   isToolComplete?: boolean; // Whether tool execution is complete
   eventId?: string; // Event ID to match tool call with result
+  agentName?: string; // Agent name (e.g., "leader", "general-purpose", etc.)
 }
 
 export interface ConversationHistory {
@@ -54,6 +55,7 @@ export interface BackendMessage {
   name?: string; // Tool name (for tool messages)
   args?: Record<string, unknown>; // Tool args (for tool messages)
   timestamp?: string;
+  agent_name?: string; // Agent name (e.g., "leader", "general-purpose", etc.)
 }
 
 // Event Types
@@ -67,6 +69,7 @@ export interface UserEventData {
 export interface AgentEventData {
   message_type: "text";
   content: string;
+  agent_name?: string; // Agent name (e.g., "leader", "general-purpose", etc.)
 }
 
 export interface ToolEventData {
@@ -74,6 +77,7 @@ export interface ToolEventData {
   tool: string;
   args?: Record<string, unknown>;
   content?: string; // Tool result (empty when calling, has content when done)
+  agent_name?: string; // Agent name (e.g., "leader", "general-purpose", etc.)
 }
 
 export interface QueuedEventData {

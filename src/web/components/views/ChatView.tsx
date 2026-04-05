@@ -705,6 +705,12 @@ function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.role === "user";
   const isToolCall = !!message.toolName;
 
+  // Get agent display name
+  const getAgentDisplayName = (agentName?: string): string => {
+    if (!agentName) return "Agent";
+    return `Agent: ${agentName}`;
+  };
+
   // User message: bubble style, right aligned
   if (isUser) {
     return (
@@ -721,6 +727,14 @@ function MessageBubble({ message }: MessageBubbleProps) {
   // Agent message: full width, no bubble
   return (
     <div className="flex flex-col gap-1">
+      {/* Agent Name Badge */}
+      {message.agentName && (
+        <div className="flex items-center gap-2 mb-1">
+          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-primary/10 text-primary border border-primary/20">
+            {getAgentDisplayName(message.agentName)}
+          </span>
+        </div>
+      )}
       {isToolCall ? (
         <Card className="border-blue-200 bg-blue-50/50 dark:bg-blue-950/20">
           <CardContent className="p-4">
