@@ -99,6 +99,22 @@ class EventAutoSendMiddleware(AgentMiddleware[AgentState, ContextT, ResponseT]):
         logger.warning("No thread_id found, using generated thread ID: %s", generated_id)
         return generated_id
 
+    def _get_agent_name(self) -> str:
+        """Extract agent name from LangGraph config.
+
+        Uses get_config() to access the RunnableConfig from langgraph's
+        contextvar. Falls back to 'leader' if not available.
+
+        Returns:
+            Agent name string from config, or 'leader' if not in a runnable context.
+        """
+        config = get_config()
+        metadata = config.get("metadata", {})
+        if metadata:
+            return metadata.get("lc_agent_name", "leader")
+        else:
+            return "leader"
+
     def wrap_model_call(
         self,
         request: ModelRequest[ContextT],
@@ -140,6 +156,8 @@ class EventAutoSendMiddleware(AgentMiddleware[AgentState, ContextT, ResponseT]):
         """
         # Get thread_id from config
         thread_id = self._get_thread_id()
+        # Get agent name from config
+        agent_name = self._get_agent_name()
         # Call the handler to get the response
         response = await handler(request)
 
@@ -157,6 +175,7 @@ class EventAutoSendMiddleware(AgentMiddleware[AgentState, ContextT, ResponseT]):
                         event = Event.create_agent_event(
                             thread_id=thread_id,
                             content=content,
+                            agent_name=agent_name
                         )
                         await self.event_center.publish_event(event)
                         logger.debug(f"Sent agent text event: {content[:100]}...")
@@ -212,6 +231,8 @@ class EventAutoSendMiddleware(AgentMiddleware[AgentState, ContextT, ResponseT]):
 
         # Get thread_id from config
         thread_id = self._get_thread_id()
+        # Get agent name from config
+        agent_name = self._get_agent_name()
         # Extract tool call info
         tool_args = request.tool_call.get("args", {})
 

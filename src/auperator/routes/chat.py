@@ -27,12 +27,14 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 def format_messages_with_subagents(
     messages: list[Any],
     subagent_messages: list[dict],
+    agent_name: str = "leader",
 ) -> list[dict]:
     """格式化消息列表，合并主 agent 和 subagent 的消息
 
     Args:
         messages: 主 agent 的消息列表
         subagent_messages: 子 agent 的执行记录
+        agent_name: 当前 agent 的名称（默认为 "leader"）
 
     Returns:
         格式化后的消息列表
@@ -58,6 +60,7 @@ def format_messages_with_subagents(
                 formatted_messages.append({
                     "type": "ai",
                     "content": content,
+                    "agent_name": agent_name,
                 })
 
             # 如果有工具调用，记录下来等待 ToolMessage
@@ -86,6 +89,7 @@ def format_messages_with_subagents(
                                 "name": tool_name,
                                 "args": tool_call.get("args", {}),
                                 "is_subagent_call": False,
+                                "agent_name": agent_name,
                             }
                             pending_tool_calls[tool_call_id] = tool_data
 
@@ -106,12 +110,13 @@ def format_messages_with_subagents(
                     # 递归格式化子 agent 的消息
                     formatted_subagent_messages = format_messages_with_subagents(
                         subagent_msg_list,
-                        []  # 子 agent 的消息不再包含子 subagent
+                        [],  # 子 agent 的消息不再包含子 subagent
+                        agent_name=subagent_name,  # 传入子 agent 的名字
                     )
 
                     # 为每个子 agent 消息添加 subagent_name 标识
                     for sub_msg in formatted_subagent_messages:
-                        sub_msg["subagent_name"] = subagent_name
+                        sub_msg["agent_name"] = subagent_name
                         formatted_messages.append(sub_msg)
 
                     # ⚠️ 注意：不添加 task 工具调用和结果到 formatted_messages
@@ -127,6 +132,7 @@ def format_messages_with_subagents(
             formatted_messages.append({
                 "type": "human",
                 "content": content,
+                "agent_name": "user",
             })
 
         # 其他类型消息
@@ -135,6 +141,7 @@ def format_messages_with_subagents(
             formatted_messages.append({
                 "type": msg_type,
                 "content": content,
+                "agent_name": agent_name,
             })
 
     return formatted_messages

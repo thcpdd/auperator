@@ -37,10 +37,11 @@ class AgentEventData(BaseModel):
     来自 Agent.astream() 的输出
     """
 
-    message_type: str = Field(description="消息类型：text 或 tool")
+    message_type: str = Field(default="text", description="消息类型，目前只有 text")
     content: str = Field(default="", description="Agent 输出内容（工具调用时为空字符串）")
     tool: str | None = Field(default=None, description="工具名称（仅当 message_type=tool 时有值）")
     args: dict[str, Any] = Field(default_factory=dict, description="工具参数（仅当 message_type=tool 时有值）")
+    agent_name: str | None = Field(default=None, description="Agent 名称（主 agent 为 None，子 agent 为名称如 'general-purpose'）")
 
     model_config = {"extra": "allow"}
 
@@ -94,8 +95,7 @@ class Event(BaseModel):
         cls,
         thread_id: str,
         content: str = "",
-        tool: str | None = None,
-        args: dict[str, Any] | None = None,
+        agent_name: str | None = None,
         **kwargs
     ) -> "Event":
         """创建 Agent 事件.
@@ -103,22 +103,19 @@ class Event(BaseModel):
         Args:
             thread_id: 会话标识
             content: Agent 输出内容
-            tool: 工具名称（可选）
-            args: 工具参数（可选）
+            agent_name: Agent 名称（主 agent 为 None，子 agent 为名称如 'general-purpose'）
             **kwargs: 其他字段
 
         Returns:
             Event 实例
         """
         data: dict[str, Any] = {
-            "message_type": "tool" if tool else "text",
+            "message_type": "text",
             "content": content,
         }
 
-        if tool:
-            data["tool"] = tool
-        if args:
-            data["args"] = args
+        if agent_name:
+            data["agent_name"] = agent_name
 
         data.update(kwargs)
 
@@ -136,6 +133,7 @@ class Event(BaseModel):
         args: dict[str, Any],
         content: str,
         event_id: str | None = None,
+        agent_name: str | None = None,
         **kwargs
     ) -> "Event":
         """创建工具调用事件.
@@ -146,22 +144,29 @@ class Event(BaseModel):
             args: 工具参数
             content: 工具执行结果
             event_id: 事件ID，如果不提供则自动生成（可用于关联工具调用和结果）
+            agent_name: Agent 名称（主 agent 为 None，子 agent 为名称如 'general-purpose'）
             **kwargs: 其他字段
 
         Returns:
             Event 实例
         """
+        data: dict[str, Any] = {
+            "message_type": "tool",
+            "content": content,
+            "tool": tool,
+            "args": args,
+        }
+
+        if agent_name:
+            data["agent_name"] = agent_name
+
+        data.update(kwargs)
+
         return cls(
             event_id=event_id or str(uuid4()),
             event_type=EventType.TOOL,
             thread_id=thread_id,
-            data={
-                "message_type": "tool",
-                "content": content,
-                "tool": tool,
-                "args": args,
-                **kwargs
-            }
+            data=data
         )
 
     @classmethod
