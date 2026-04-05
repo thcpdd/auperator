@@ -4,6 +4,7 @@ import json
 import logging
 
 from fastapi import APIRouter, Depends
+from fastapi.concurrency import run_in_threadpool
 from redis.asyncio import Redis as AsyncRedis
 
 from auperator.config import settings
@@ -49,7 +50,7 @@ async def ingest_logs(
             log_event = VectorLogEvent.from_dict(log_data)
 
             # 提取日志模板
-            result = drain3_service.extract_template(log_event.message)
+            result = await run_in_threadpool(drain3_service.extract_template, log_event.message)
 
             if result is None:
                 continue
