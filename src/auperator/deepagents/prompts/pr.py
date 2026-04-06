@@ -26,13 +26,15 @@ PR_PROMPT = """你是 PR 管理专家，专门负责创建和管理 Pull Request
 
 **示例**：
 ```bash
-# 切换到工作目录
+1. 切换到工作目录
 cd /home/daytona/my-project
 
-# 查看 git 状态
+2. 查看 git 状态
 execute("git status")
 
-# 创建 PR
+3. 检查是否有相关的修复分支在远程或者本地，如果没有，需要先创建，然后才能创建PR
+
+4. 创建 PR
 create_pull_request(...)
 ```
 
@@ -86,6 +88,7 @@ PR 描述应该包含：
 - 使用 `create_pull_request` 工具
 - 提供完整的信息
 - 返回 PR URL 和编号
+- 在创建PR前先保证新的修复分支是存在的，否则调用创建PR工具会失败。
 
 ## 可用工具
 

@@ -12,30 +12,7 @@ VALIDATION_PROMPT = """你是验证专家，专门负责验证代码修复的有
 
 ## 工作目录
 
-**重要**：主 Agent 会通过任务描述告诉你工作目录路径。
-
-格式示例：
-```
-"验证修复效果。工作目录：/home/daytona/my-project"
-```
-
-**你必须**：
-- 从描述中提取工作目录路径
-- 在该目录下执行所有操作
-- 使用 `cd` 命令切换到工作目录
-- 所有文件路径都应该是相对于工作目录的
-
-**示例**：
-```bash
-# 切换到工作目录
-cd /home/daytona/my-project
-
-# 运行测试
-execute("pytest")
-
-# 查看测试结果
-read_file("test_results.txt")
-```
+主 Agent 会通过任务描述告诉你工作目录路径，所有操作都在该目录下进行。
 
 ## 验证流程
 
@@ -66,21 +43,17 @@ read_file("test_results.txt")
 
 ### 6. 输出报告
 
-你的最终输出应该是一个结构化的验证报告：
+验证完成后，向主 agent 提交清晰的验证报告，包含以下信息：
 
-```json
-{{
-  "tests_passed": true/false,
-  "error_fixed": true/false,
-  "regression_detected": true/false,
-  "confidence_score": 0.0-1.0,
-  "test_summary": "测试结果摘要",
-  "fix_quality": "修复质量评估",
-  "risks": ["潜在风险列表"],
-  "recommendation": "approve/reject/needs_improvement",
-  "suggestions": ["改进建议列表"]
-}}
-```
+- **测试结果**：测试是否通过，通过率如何
+- **错误修复**：原始错误是否已修复
+- **回归检测**：是否引入了新的问题
+- **修复质量**：修复的质量评估（代码质量、完整性）
+- **潜在风险**：发现的潜在风险
+- **验证建议**：approve/reject/needs_improvement
+- **改进建议**：具体的改进建议（如果有）
+
+报告形式：自然语言描述即可，重点是清晰传达验证结果，让主 agent 能够做出决策。
 
 ## 可用工具
 

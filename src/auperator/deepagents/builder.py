@@ -1,7 +1,6 @@
 """Deep Agents come with planning, filesystem, and subagents."""
 
 import os
-
 from collections.abc import Callable, Sequence
 from typing import Any
 
@@ -352,9 +351,6 @@ def create_auperator(
     # 解析模型
     model = get_default_model() if model is None else resolve_model(model)
 
-    # 通过 ToolRegistry 获取所有工具
-    subagent_tools = ToolRegistry.get_all()
-
     # 定义子 Agent
     subagents: list[SubAgent] = [
         {
@@ -362,28 +358,28 @@ def create_auperator(
             "description": "分析错误日志、收集上下文、分类错误类型、评估严重程度、生成错误分析报告",
             "system_prompt": LOG_ANALYSIS_PROMPT,
             "model": model,
-            "tools": subagent_tools,  # log_analysis 使用所有工具
+            "tools": ToolRegistry.get("memory", "docker"),
         },
         {
             "name": "fix",
             "description": "根据错误分析报告定位问题代码、实施安全有效的修复、生成修复说明",
             "system_prompt": FIX_PROMPT,
             "model": model,
-            "tools": subagent_tools,  # fix 使用所有工具
+            "tools": [],
         },
         {
             "name": "validation",
             "description": "运行测试套件、验证修复效果、检测回归问题、评估修复质量",
             "system_prompt": VALIDATION_PROMPT,
             "model": model,
-            "tools": subagent_tools,  # validation 使用所有工具
+            "tools": [],
         },
         {
             "name": "pr",
             "description": "生成 PR 描述、创建有意义的 PR 标题、创建 Pull Request",
             "system_prompt": PR_PROMPT,
             "model": model,
-            "tools": ToolRegistry.get("pr"),  # pr 只使用 PR 相关工具
+            "tools": ToolRegistry.get("pr"),
         },
     ]
 
