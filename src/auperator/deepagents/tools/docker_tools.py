@@ -5,10 +5,14 @@ for error diagnosis and remediation.
 """
 
 import logging
+import os
 from typing import Optional
 
 import docker
 from langchain.tools import tool, BaseTool
+
+from auperator.config import settings
+
 
 logger = logging.getLogger(__name__)
 
@@ -460,6 +464,231 @@ def get_container_processes(container_name: str) -> dict:
         }
 
 
+@tool
+def start_container(
+    docker_image: str,
+    container_name: str,
+    volume_mounts: dict[str, str] | None = None,
+    environment_vars: dict[str, str] | None = None,
+    port_mappings: dict[str, str] | None = None,
+    restart_policy: str = "unless-stopped",
+    command: str | None = None
+) -> dict:
+    """Start a Docker container with specified configuration.
+
+    Args:
+        docker_image: Docker image ID or name (e.g., "postgres:13" or "abc123")
+        container_name: Name for the container
+        volume_mounts: Dictionary of volume mounts {host_path: container_path}
+                       e.g., {"/host/path": "/container/path"}
+        environment_vars: Dictionary of environment variables
+        port_mappings: Dictionary of port mappings {container_port: host_port}
+        restart_policy: Container restart policy (default: unless-stopped)
+        command: Command to run in the container
+
+    Returns:
+        Dictionary containing:
+            - success: bool - Whether container was started successfully
+            - container_id: str - Container ID
+            - container_name: str - Container name
+            - status: str - Container status
+            - message: str - Status message
+            - error: str | None - Error message if failed
+
+    Example:
+        >>> result = start_container(
+        ...     docker_image="postgres:13",
+        ...     container_name="my-postgres",
+        ...     volume_mounts={"/data/postgres": "/var/lib/postgresql/data"},
+        ...     environment_vars={"POSTGRES_PASSWORD": "secret"},
+        ...     port_mappings={"5432": "5432"}
+        ... )
+        >>> if result['success']:
+        ...     print(f"Container started: {result['container_id']}")
+    """
+    try:
+        client = get_docker_client()
+
+        # 检查容器是否已存在
+        try:
+            existing_container = client.containers.get(container_name)
+            if existing_container.status == 'running':
+                return {
+                    'success': True,
+                    'container_id': existing_container.id,
+                    'container_name': container_name,
+                    'status': 'running',
+                    'message': f"Container '{container_name}' is already running",
+                    'error': None
+                }
+            else:
+                # 删除已存在的停止容器
+                existing_container.remove()
+                logger.info(f"Removed existing container: {container_name}")
+        except docker.errors.NotFound:
+            pass  # 容器不存在，继续创建
+
+        # 准备容器配置
+        container_config = {
+            'image': docker_image,
+            'name': container_name,
+            'detach': True,
+            'restart_policy': {"Name": restart_policy}
+        }
+
+        # 添加卷挂载
+        volumes_dict = {}
+
+        # 默认挂载 Docker socket
+        volumes_dict['/var/run/docker.sock'] = {'bind': '/var/run/docker.sock', 'mode': 'rw'}
+
+        # 添加用户指定的卷挂载
+        if volume_mounts:
+            for host_path, container_path in volume_mounts.items():
+                # 将相对路径转换为绝对路径
+                if not os.path.isabs(host_path):
+                    host_path = os.path.abspath(host_path)
+                volumes_dict[host_path] = {'bind': container_path, 'mode': 'rw'}
+
+        container_config['volumes'] = volumes_dict
+
+        # 添加环境变量
+        if environment_vars:
+            container_config['environment'] = environment_vars
+
+        # 添加端口映射
+        if port_mappings:
+            ports_dict = {}
+            for container_port, host_port in port_mappings.items():
+                ports_dict[f"{container_port}/tcp"] = host_port
+            container_config['ports'] = ports_dict
+
+        # 添加命令
+        if command:
+            container_config['command'] = command
+
+        # 启动容器
+        container = client.containers.run(**container_config)
+
+        return {
+            'success': True,
+            'container_id': container.id,
+            'container_name': container_name,
+            'status': container.status,
+            'message': f"Container '{container_name}' started successfully",
+            'error': None
+        }
+
+    except docker.errors.NotFound:
+        return {
+            'success': False,
+            'container_id': None,
+            'container_name': container_name,
+            'status': None,
+            'message': None,
+            'error': f"Docker image not found: {docker_image}"
+        }
+    except docker.errors.DockerException as e:
+        return {
+            'success': False,
+            'container_id': None,
+            'container_name': container_name,
+            'status': None,
+            'message': None,
+            'error': f"Docker error: {str(e)}"
+        }
+    except Exception as e:
+        logger.exception(f"Unexpected error starting container: {e}")
+        return {
+            'success': False,
+            'container_id': None,
+            'container_name': container_name,
+            'status': None,
+            'message': None,
+            'error': f"Unexpected error: {str(e)}"
+        }
+
+
+@tool
+def stop_container(container_name: str, timeout: int = 10) -> dict:
+    """Stop a running Docker container.
+
+    Args:
+        container_name: Name of the container
+        timeout: Timeout in seconds before forcing stop (default: 10)
+
+    Returns:
+        Dictionary containing:
+            - success: bool - Whether container was stopped successfully
+            - container_name: str - Container name
+            - message: str - Status message
+            - error: str | None - Error message if failed
+
+    Example:
+        >>> result = stop_container("my-postgres")
+        >>> if result['success']:
+        ...     print(f"Container stopped successfully")
+    """
+    try:
+        client = get_docker_client()
+
+        try:
+            container = client.containers.get(container_name)
+        except docker.errors.NotFound:
+            return {
+                'success': True,
+                'container_name': container_name,
+                'message': f"Container '{container_name}' not found (already stopped)",
+                'error': None
+            }
+
+        # 停止容器
+        container.stop(timeout=timeout)
+
+        return {
+            'success': True,
+            'container_name': container_name,
+            'message': f"Container '{container_name}' stopped successfully",
+            'error': None
+        }
+
+    except docker.errors.DockerException as e:
+        return {
+            'success': False,
+            'container_name': container_name,
+            'message': None,
+            'error': f"Docker error: {str(e)}"
+        }
+    except Exception as e:
+        logger.exception(f"Unexpected error stopping container: {e}")
+        return {
+            'success': False,
+            'container_name': container_name,
+            'message': None,
+            'error': f"Unexpected error: {str(e)}"
+        }
+
+
+@tool
+def get_vector_image() -> str:
+    """Get the Docker image ID or name for Vector.
+
+    Returns:
+        str: Docker image ID or name for Vector
+    """
+    return settings.vector_image
+
+
+@tool
+def get_monitored_container() -> str:
+    """Get the name of the monitored container.
+
+    Returns:
+        str: Name of the monitored container
+    """
+    return settings.monitored_container
+
+
 def get_tools() -> list[BaseTool]:
     return [
         get_container_info,
@@ -467,5 +696,9 @@ def get_tools() -> list[BaseTool]:
         restart_container,
         get_container_stats,
         list_containers,
-        get_container_processes
+        get_container_processes,
+        start_container,
+        stop_container,
+        get_vector_image,
+        get_monitored_container
     ]

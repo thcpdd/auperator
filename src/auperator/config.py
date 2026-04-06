@@ -156,6 +156,9 @@ class Settings(BaseSettings):
     # Docker 日志流配置
     monitored_container: str | None = Field(default=None, alias="MONITORED_CONTAINER")
 
+    # Vector 配置
+    vector_image: str = Field(default="", alias="VECTOR_IMAGE")
+
     @field_validator("log_level")
     @classmethod
     def validate_log_level(cls, v: str) -> str:
