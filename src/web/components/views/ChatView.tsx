@@ -16,7 +16,8 @@ import {
   ScrollText,
   Settings,
   Bug,
-  MessageSquare } from "lucide-react";
+  MessageSquare,
+  ArrowDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -60,9 +61,69 @@ export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
   const [conversationTab, setConversationTab] = useState<ConversationTab>('log');
   const onEventRef = useRef<(event: Event) => void>(undefined);
 
+  // Smart scroll state
+  const [showNewMessageButton, setShowNewMessageButton] = useState(false);
+  const isAutoScrollingRef = useRef(false);
+  const previousMessagesLengthRef = useRef(0);
+  const wasLoadingHistoryRef = useRef(false);
+
   // Typing effect for welcome message
   const [typedText, setTypedText] = useState("");
   const welcomeText = "询问关于系统状态、日志分析或Bug修复的问题";
+
+  // Check if user is near bottom (within 300px)
+  const checkIfNearBottom = useCallback(() => {
+    const viewport = scrollRef.current?.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement;
+    if (!viewport) return true;
+
+    // If content doesn't overflow, consider user at bottom
+    if (viewport.scrollHeight <= viewport.clientHeight) {
+      return true;
+    }
+
+    const threshold = 300;
+    const distanceToBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+    return distanceToBottom <= threshold;
+  }, []);
+
+  // Handle scroll events to detect user scroll position
+  useEffect(() => {
+    const viewport = scrollRef.current?.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement;
+    if (!viewport) return;
+
+    const handleScroll = () => {
+      if (isAutoScrollingRef.current) return;
+
+      // Hide new message button when user scrolls near bottom
+      if (checkIfNearBottom()) {
+        setShowNewMessageButton(false);
+      }
+    };
+
+    // Initial check
+    handleScroll();
+
+    viewport.addEventListener('scroll', handleScroll, { passive: true });
+    return () => viewport.removeEventListener('scroll', handleScroll);
+  }, [checkIfNearBottom]);
+
+  // Scroll to bottom helper
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    const viewport = scrollRef.current?.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement;
+    if (viewport) {
+      isAutoScrollingRef.current = true;
+      viewport.scrollTo({
+        top: viewport.scrollHeight,
+        behavior
+      });
+
+      // Reset flag after animation
+      setTimeout(() => {
+        isAutoScrollingRef.current = false;
+        setShowNewMessageButton(false);
+      }, behavior === 'smooth' ? 300 : 0);
+    }
+  }, []);
 
   // Rename dialog state
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
@@ -133,28 +194,37 @@ export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
     }
   }, [messages.length, isLoadingHistory]);
 
-  // Auto-scroll to bottom when new messages arrive or when history finishes loading
+  // Smart auto-scroll: only scroll if user is near bottom or if history just finished loading
   useEffect(() => {
-    const scrollToBottom = () => {
-      // Find the actual scrollable viewport inside ScrollArea
-      const viewport = scrollRef.current?.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement;
-      if (viewport) {
-        viewport.scrollTo({
-          top: viewport.scrollHeight,
-          behavior: 'smooth'
-        });
-      }
-    };
+    const hasNewMessages = messages.length > previousMessagesLengthRef.current;
+    previousMessagesLengthRef.current = messages.length;
 
-    // Use setTimeout to ensure DOM has updated
-    setTimeout(scrollToBottom, 100);
-  }, [messages, isLoadingHistory]);
+    // Check if history just finished loading
+    const historyJustFinished = wasLoadingHistoryRef.current && !isLoadingHistory;
+    wasLoadingHistoryRef.current = isLoadingHistory;
+
+    if (!isLoadingHistory && hasNewMessages) {
+      // Use a longer timeout to ensure DOM has updated
+      setTimeout(() => {
+        // Always scroll when history just finished loading OR user is near bottom
+        if (historyJustFinished || checkIfNearBottom()) {
+          scrollToBottom('smooth');
+        } else {
+          // User is not near bottom and there are new messages, show button
+          setShowNewMessageButton(true);
+        }
+      }, 150);
+    }
+  }, [messages, isLoadingHistory, checkIfNearBottom, scrollToBottom]);
 
   const handleSend = async () => {
     if (!input.trim()) return;
 
     const messageContent = input.trim();
     setInput("");
+
+    // Auto-scroll when user sends a message
+    setTimeout(() => scrollToBottom('smooth'), 100);
 
     // Only show sending animation when agent is not running
     if (!isLoading) {
@@ -256,7 +326,18 @@ export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
       {/* Main Chat Area */}
       <div className="flex flex-1 flex-col">
         {/* Messages Area */}
-        <ScrollArea className="flex-1 p-4 scrollbar-thin" ref={scrollRef}>
+        <ScrollArea className="flex-1 p-4 scrollbar-thin relative" ref={scrollRef}>
+          {/* New Message Button */}
+          {showNewMessageButton && (
+            <Button
+              onClick={() => scrollToBottom('smooth')}
+              className="absolute bottom-8 left-1/2 -translate-x-1/2 z-10 shadow-lg"
+              size="sm"
+            >
+              <ArrowDown className="h-4 w-4 mr-2" />
+              新消息
+            </Button>
+          )}
           <div className="mx-auto max-w-5xl space-y-4 pb-4">
             {isLoadingHistory ? (
               <div className="flex h-full items-center justify-center">
@@ -556,6 +637,8 @@ export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
                             onClick={() => {
                               if (conv.thread_id !== threadId) {
                                 loadConversation(conv.thread_id);
+                                // Scroll to bottom after loading conversation
+                                setTimeout(() => scrollToBottom('smooth'), 200);
                               }
                             }}
                             className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-left"
