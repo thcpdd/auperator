@@ -60,13 +60,22 @@ npm run build
 # Start production server
 npm start
 # or: pnpm start
+
+# Run linter
+npm run lint
 ```
 
 The Web UI provides:
-- Real-time chat interface with the Agent
-- Conversation history management
-- SSE-based event streaming
-- Modern UI with shadcn/ui components
+- **Real-time chat interface** with the Agent
+- **Conversation history management** with create, rename, delete
+- **SSE-based event streaming** for real-time updates
+- **Modern UI** with shadcn/ui components
+- **Multiple pages**:
+  - `/` - Main chat interface
+  - `/chat` - Dedicated chat page
+  - `/config` - Configuration management
+  - `/status` - System status monitoring
+  - `/logs` - Log viewing and analysis
 
 ## Architecture
 
@@ -408,10 +417,13 @@ The event system uses Redis Streams for real-time event distribution:
   "thread_id": "conversation_uuid",
   "event_type": "USER|AGENT|ERROR|STATUS",
   "content": "event content",
+  "agent_name": "agent_identifier",
   "metadata": {},
   "timestamp": "2026-03-17T14:30:00Z"
 }
 ```
+
+**Agent Name Tracking**: Events support agent name tracking for multi-agent scenarios, allowing identification of which agent generated specific events.
 
 **Consumer Groups**:
 - `web-ui` - Web UI SSE stream
@@ -448,7 +460,23 @@ The event system uses Redis Streams for real-time event distribution:
 
 **Add a new service**: Create in `services/` and initialize in `GlobalState.initialize_all()`
 
-**Add a new Agent tool**: Create a function decorated with `@tool` in `deepagents/tools/` and include it in the `get_tools()` function
+**Add a new Agent tool**:
+1. Create a function decorated with `@tool` in `deepagents/tools/`
+2. Register in `ToolRegistry` in `deepagents/tools/registry.py`
+3. Add to appropriate sub-agent's tool list in `create_auperator()`
+
+**Add a new sub-agent**:
+1. Create prompt in `deepagents/prompts/your_agent.py`
+2. Add sub-agent spec in `create_auperator()` function:
+   ```python
+   {
+       "name": "your_agent",
+       "description": "What this agent does",
+       "system_prompt": YOUR_AGENT_PROMPT,
+       "model": model,
+       "tools": ToolRegistry.get("tool_group"),
+   }
+   ```
 
 **Add a new API route**: Create in `routes/` and register in `server.py`
 
@@ -462,52 +490,176 @@ The event system uses Redis Streams for real-time event distribution:
 
 ## DeepAgents Architecture
 
-The Agent system is built on a custom DeepAgents architecture (`deepagents/`), providing:
+The Agent system is built on a custom **Multi-Agent DeepAgents architecture** (`deepagents/`), providing:
+
+### Architecture Overview
+
+Auperator uses a **multi-agent orchestration system** with specialized sub-agents:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Main Agent (Orchestrator)                 │
+│  - Coordinates task delegation                              │
+│  - Manages conversation flow                                 │
+│  - Routes to specialized sub-agents                          │
+└─────────────────────────────────────────────────────────────┘
+                           │
+                           ▼
+        ┌──────────────────┼──────────────────┐
+        │                  │                  │
+        ▼                  ▼                  ▼
+┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+│ log_analysis │  │     fix      │  │ validation   │
+│              │  │              │  │              │
+│ - Analyze    │  │ - Fix code   │  │ - Run tests  │
+│ - Classify   │  │ - Edit files │  │ - Verify     │
+│ - Report     │  │ - Document   │  │ - Check      │
+└──────────────┘  └──────────────┘  └──────────────┘
+                                                │
+                                                ▼
+                                        ┌──────────────┐
+                                        │      pr      │
+                                        │              │
+                                        │ - Create PR  │
+                                        │ - Describe   │
+                                        └──────────────┘
+```
 
 ### Core Components
 
 **Builder** (`deepagents/builder.py`):
-- `create_auperator()` - Main entry point for creating agents
+- `create_auperator()` - Creates the multi-agent system
 - Returns a LangGraph `CompiledStateGraph`
 - Configurable model, tools, middleware, skills, and subagents
+- Uses `CompositeBackend` by default (Daytona sandbox + local Shell)
+
+**Multi-Agent System** (`deepagents/builder.py`):
+
+The `create_auperator()` function creates a specialized multi-agent system with:
+
+1. **Main Agent (Orchestrator)**
+   - Coordinates all sub-agents
+   - Manages conversation flow
+   - Routes tasks to appropriate specialists
+   - Uses `EventAutoSendMiddleware` for real-time event streaming
+
+2. **Specialized Sub-Agents**
+   - **log_analysis** - Log analysis expert
+     - Queries historical memory for similar issues
+     - Collects context and classifies errors
+     - Assesses severity and impact
+     - Generates structured analysis reports
+     - Tools: `memory_tools`, `docker_tools`
+
+   - **fix** - Code fixing expert
+     - Locates problematic code based on analysis
+     - Implements safe, effective fixes
+     - Generates fix documentation
+     - Tools: Filesystem tools (`read`, `edit`, `write`, `grep`, `glob`)
+
+   - **validation** - Validation expert
+     - Runs test suites
+     - Verifies fix effectiveness
+     - Detects regressions
+     - Assesses fix quality
+
+   - **pr** - PR management expert
+     - Generates PR descriptions
+     - Creates meaningful PR titles
+     - Submits Pull Requests
+     - Tools: `pr_tools`
+
+3. **General-Purpose Sub-Agent**
+   - `general-purpose` - Handles general tasks
+   - Has access to all tools like the main agent
+   - Useful for isolating context and token usage
 
 **Backends** (`deepagents/backends/`):
-- `LocalShellBackend` - Default backend for filesystem and shell access
-- `SandboxBackend` - For Daytona sandbox integration
+- `CompositeBackend` - Default backend routing to:
+  - **DaytonaSandbox** (default) - Safe code execution in sandbox
+  - **LocalShellBackend** (`/local` route) - Local filesystem access
 - `StateBackend` - For in-memory state during invoke
-- Backends implement `BackendProtocol` for filesystem and execution
+- `StoreBackend` - For persistent storage
+- `FilesystemBackend` - For filesystem operations
+- All backends implement `BackendProtocol` for filesystem and execution
 
 **Middleware** (`deepagents/middleware/`):
+- `EventAutoSendMiddleware` - Automatically sends agent events (tool calls, outputs) to EventCenter
 - `TodoListMiddleware` - Built-in todo list management
 - `FilesystemMiddleware` - File operation tools (ls, read, write, edit, glob, grep)
-- `SubAgentMiddleware` - Spawns specialized subagents
+- `SubAgentMiddleware` - Spawns and manages specialized subagents
 - `SkillsMiddleware` - Loads skill files from directories
 - `MemoryMiddleware` - Loads memory files (AGENTS.md)
 - `SummarizationMiddleware` - Summarizes large outputs
 - `PatchToolCallsMiddleware` - Patches tool call responses
 
+**State Management** (`deepagents/state.py`):
+- `AuperatorState` - Main agent state with subagent message tracking
+- `SubAgentExecution` - Records subagent execution history
+  - `tool_call_id` - Links to main agent messages
+  - `subagent_name` - Identifies which subagent was called
+  - `messages` - Intermediate messages from subagent execution
+- All state is persisted via checkpointer (SQLite)
+
 **Tools** (`deepagents/tools/`):
 - `docker_tools.py` - Docker container inspection and management
   - `get_container_info`, `get_container_logs`, `restart_container`
   - `get_container_stats`, `list_containers`, `get_container_processes`
-- `pull_request.py` - GitHub PR creation
+- `pr_tools.py` - GitHub PR creation
+- `memory_tools.py` - Memory storage and retrieval for agent knowledge
+  - `save_memory` - Save problem/solution pairs to vector store
+  - `retrieve_memories` - Search historical memories by semantic similarity
+- `registry.py` - Tool registry system for managing available tools
+
+**Prompts** (`deepagents/prompts/`):
+- `system.py` - Base system prompt for main agent
+- `log_analysis.py` - Log analysis expert prompt with memory integration
+- `fix.py` - Code fixing expert prompt
+- `validation.py` - Validation expert prompt
+- `pr.py` - PR management expert prompt
 
 **Skills** (`deepagents/skills/`):
 - `daytona/` - Daytona sandbox management skills
 - Skills are loaded dynamically by `SkillsMiddleware`
 
+### Multi-Agent Workflow
+
+**Typical Error Resolution Flow**:
+
+1. **Error Detection** → Log received from Vector
+2. **Log Analysis Agent**:
+   - Queries memory for similar historical issues
+   - Collects context (logs, container info, system state)
+   - Classifies error type and severity
+   - Generates analysis report
+3. **Fix Agent**:
+   - Reads analysis report
+   - Locates problematic code
+   - Implements safe fixes
+   - Documents changes
+4. **Validation Agent**:
+   - Runs test suite
+   - Verifies fix effectiveness
+   - Checks for regressions
+5. **PR Agent**:
+   - Generates PR description
+   - Creates Pull Request
+6. **Main Agent**:
+   - Orchestrates the entire process
+   - Sends real-time events via EventCenter
+   - Updates conversation state
+
 ### Agent Creation Pattern
 
 ```python
 from auperator.deepagents import create_auperator
-from auperator.deepagents.tools.docker_tools import get_tools as docker_tools
-from auperator.deepagents.tools.pull_request import get_tools as pr_tools
 
-# Create agent with tools and skills
-tools = docker_tools() + pr_tools()
+# Create the multi-agent system
 agent = create_auperator(
-    skills=["./src/auperator/deepagents/skills"],
-    tools=tools,
+    model="gpt-4",  # or any model
+    checkpointer=checkpointer,  # Optional: for state persistence
+    store=store,  # Optional: for persistent storage
+    debug=False,  # Enable debug mode
 )
 
 # Invoke the agent
@@ -515,16 +667,34 @@ async for chunk in agent.astream({"messages": [HumanMessage("Fix the error")]}):
     pass
 ```
 
+The `create_auperator()` function automatically:
+- Creates the main orchestrator agent
+- Initializes all 4 specialized sub-agents
+- Adds the general-purpose sub-agent
+- Configures CompositeBackend (Daytona + LocalShell)
+- Sets up EventAutoSendMiddleware for real-time events
+- Configures tool registry with all available tools
+
 ### Agent Middleware Stack
 
-The agent middleware is applied in this order:
+**Main Agent Middleware** (in order):
 1. `TodoListMiddleware` - Todo management
-2. `MemoryMiddleware` (if memory specified) - Load AGENTS.md files
-3. `SkillsMiddleware` (if skills specified) - Load skill files
-4. `FilesystemMiddleware` - File operations
-5. `SubAgentMiddleware` - Subagent spawning
-6. `SummarizationMiddleware` - Output summarization
-7. `PatchToolCallsMiddleware` - Tool call patching
+2. `EventAutoSendMiddleware` - Automatic event sending
+3. `MemoryMiddleware` (if memory specified) - Load AGENTS.md files
+4. `SkillsMiddleware` (if skills specified) - Load skill files
+5. `FilesystemMiddleware` - File operations
+6. `SubAgentMiddleware` - Subagent spawning
+7. `SummarizationMiddleware` - Output summarization
+8. `PatchToolCallsMiddleware` - Tool call patching
+
+**Sub-Agent Middleware** (in order):
+1. `TodoListMiddleware` - Todo management
+2. `FilesystemMiddleware` - File operations
+3. `SummarizationMiddleware` - Output summarization
+4. `PatchToolCallsMiddleware` - Tool call patching
+5. `EventAutoSendMiddleware` - Automatic event sending
+6. `SkillsMiddleware` (if skills specified) - Load skill files
+7. User-provided middleware (if any)
 
 ### Configuration for Agent
 
@@ -532,37 +702,65 @@ The agent uses these settings from `config.py`:
 - `OPENAI_API_KEY` - OpenAI API key
 - `OPENAI_BASE_URL` - API base URL (default: https://api.openai.com/v1)
 - `OPENAI_MODEL` - Model name (default: gpt-4)
+- `MONITORED_CONTAINER` - Container name for log analysis agent
+- `EMBEDDING_*` - Embedding settings for memory system
+- `QDRANT_*` - Qdrant settings for vector storage
 
 ### Subagent System
 
 DeepAgents supports specialized subagents:
 - Each subagent has its own tools, model, and middleware
-- Main agent can spawn subagents via the `task` tool
+- Main agent spawns subagents via the `task` tool
 - General-purpose subagent is created automatically with default middleware
+- **Sub-agent execution tracking**:
+  - All intermediate messages captured
+  - Execution history stored in `subagent_messages` state
+  - Linked to main agent via `tool_call_id`
+  - Persisted across restarts via checkpointer
+
+**Memory-Enabled Sub-agents**:
+- The `log_analysis` sub-agent has access to memory tools
+- Can query historical solutions for similar errors
+- Can save new experiences to vector store (Qdrant)
+- Accumulates knowledge over time for better error analysis
 
 ### Agent Worker
 
 **AgentWorker** (`deepagents/worker.py`):
-- Background task processor for Agent execution
+- Background task processor for multi-agent execution
 - Listens to Redis Streams for USER events
 - Manages agent lifecycle and checkpointer
 - Provides conversation history retrieval
+- Streams sub-agent execution details via EventCenter
 - Langfuse integration for tracing
-- Stream events back to EventCenter
 
 **Key Features**:
 - AsyncSqliteSaver for checkpoint persistence
 - Thread-based conversation management
-- Real-time event streaming
+- Real-time event streaming (including sub-agent messages)
 - Error handling and recovery
+- Automatic state persistence (including subagent_messages)
+
+### Event Flow
+
+**Multi-Agent Event Streaming**:
+
+1. **User sends message** → USER event published
+2. **Main Agent processes** → Sends AGENT events with tool calls
+3. **Sub-Agent invoked** → Intermediate messages captured
+4. **Sub-Agent completes** → Final result returned to main agent
+5. **Main Agent responds** → AGENT events with final output
+
+All events include `agent_name` field for tracking which agent generated them.
 
 ### Checkpointer & State Management
 
 - Uses **LangGraph AsyncSqliteSaver** for state persistence
 - Checkpoint file: `auperator.db.sqlite3`
 - Maintains conversation state across restarts
+- **Sub-agent execution history** persisted in `subagent_messages` field
 - Thread-based conversation isolation
-- Supports conversation history retrieval
+- Supports conversation history retrieval with full sub-agent details
 
 ## 配置文件修改
 
@@ -659,17 +857,21 @@ redis-cli XREAD STREAMS auperator:events:all $
 ### Tech Stack
 
 - **Framework**: Next.js 16 with App Router
-- **UI Library**: shadcn/ui + Radix UI
-- **Styling**: Tailwind CSS 4
+- **UI Library**: shadcn/ui + Radix UI + Base UI
+- **Styling**: Tailwind CSS 4 with tw-animate-css
 - **State Management**: React hooks + SSE for real-time updates
+- **Markdown**: react-markdown with rehyp-highlight and remark-gfm
+- **Icons**: lucide-react
 - **Components**: Custom components in `src/web/components/`
 
 ### Key Components
 
-- **Chat Interface**: Real-time chat with streaming responses
-- **Conversation List**: Sidebar with conversation history
-- **Event Streaming**: SSE-based real-time updates
-- **Markdown Rendering**: React Markdown with syntax highlighting
+- **ChatView**: Main chat interface with streaming responses
+- **ConversationList**: Sidebar with conversation history and filtering
+- **ConfigView**: Configuration management interface
+- **StatusView**: System status and health monitoring
+- **Event Streaming**: SSE-based real-time updates with agent name tracking
+- **Markdown Rendering**: React Markdown with syntax highlighting (highlight.js)
 
 ### Adding New Features
 
