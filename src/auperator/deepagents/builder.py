@@ -41,6 +41,7 @@ from .prompts.log_analysis import LOG_ANALYSIS_PROMPT
 from .prompts.fix import FIX_PROMPT
 from .prompts.validation import VALIDATION_PROMPT
 from .prompts.pr import PR_PROMPT
+from .prompts.initialize import INITIALIZE_PROMPT
 from .tools.registry import ToolRegistry
 from .state import AuperatorState
 
@@ -332,7 +333,8 @@ def create_auperator(
 ) -> CompiledStateGraph:
     """创建 Auperator 多 Agent 系统.
 
-    Auperator 是一个智能的 AIOps 系统，包含主 Agent 和 4 个专门的子 Agent：
+    Auperator 是一个智能的 AIOps 系统，包含主 Agent 和 5 个专门的子 Agent：
+    - initialize: 项目初始化专家（探索代码库、创建 AUPERATOR.md）
     - log_analysis: 日志分析专家
     - fix: 代码修复专家
     - validation: 验证专家
@@ -353,6 +355,12 @@ def create_auperator(
 
     # 定义子 Agent
     subagents: list[SubAgent] = [
+        {
+            "name": "initialize",
+            "description": "探索目标代码库、分析项目结构和架构、理解构建测试运行命令、创建 AUPERATOR.md 项目记忆文件",
+            "system_prompt": INITIALIZE_PROMPT,
+            "model": model,
+        },
         {
             "name": "log_analysis",
             "description": "分析错误日志、收集上下文、分类错误类型、评估严重程度、生成错误分析报告",
