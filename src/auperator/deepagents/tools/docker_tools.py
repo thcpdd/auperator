@@ -279,8 +279,13 @@ def get_container_stats(container_name: str) -> dict:
         system_delta = stats["cpu_stats"]["system_cpu_usage"] - \
                       stats["precpu_stats"]["system_cpu_usage"]
         cpu_percent = 0.0
-        if system_delta > 0:
-            cpu_percent = (cpu_delta / system_delta) * len(stats["cpu_stats"]["cpu_usage"].percpu_usage) * 100.0
+        if system_delta > 0 and cpu_delta > 0:
+            # Use online_cpus if available, otherwise try percpu_usage, default to 1
+            num_cpus = stats["cpu_stats"].get("online_cpus")
+            if num_cpus is None:
+                percpu_usage = stats["cpu_stats"]["cpu_usage"].get("percpu_usage", [])
+                num_cpus = len(percpu_usage) if percpu_usage else 1
+            cpu_percent = (cpu_delta / system_delta) * num_cpus * 100.0
 
         # Memory stats
         memory_stats = stats["memory_stats"]
