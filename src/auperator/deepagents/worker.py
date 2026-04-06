@@ -80,7 +80,6 @@ class AgentWorker:
 
         # 创建 Agent
         self.agent = create_auperator(
-            skills=["./src/auperator/deepagents/skills"],
             tools=ToolRegistry.get_all(),
             checkpointer=self.checkpointer,
         )

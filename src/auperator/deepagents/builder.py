@@ -192,16 +192,17 @@ def create_deep_agent(  # noqa: C901, PLR0912  # Complex graph assembly logic wi
 
     # Use CompositeBackend with Daytona sandbox as default
     # Routes: default → Daytona (sandbox), /local → LocalShell (local filesystem)
+    local_shell_backend = LocalShellBackend(
+        root_dir=".",
+        virtual_mode=True,
+        inherit_env=True,
+    )
     if backend is None:
         sandbox = get_or_create_sync_daytona_sandbox()
         backend = CompositeBackend(
             default=DaytonaSandbox(sandbox=sandbox),
             routes={
-                "/local": LocalShellBackend(
-                    root_dir=".",
-                    virtual_mode=True,
-                    inherit_env=True,
-                )
+                "/local": local_shell_backend
             },
         )
 
@@ -213,7 +214,7 @@ def create_deep_agent(  # noqa: C901, PLR0912  # Complex graph assembly logic wi
         PatchToolCallsMiddleware(),
     ]
     if skills is not None:
-        gp_middleware.append(SkillsMiddleware(backend=backend, sources=skills))
+        gp_middleware.append(SkillsMiddleware(backend=local_shell_backend, sources=skills))
     if interrupt_on is not None:
         gp_middleware.append(HumanInTheLoopMiddleware(interrupt_on=interrupt_on))
 
@@ -248,7 +249,7 @@ def create_deep_agent(  # noqa: C901, PLR0912  # Complex graph assembly logic wi
             ]
             subagent_skills = spec.get("skills")
             if subagent_skills:
-                subagent_middleware.append(SkillsMiddleware(backend=backend, sources=subagent_skills))
+                subagent_middleware.append(SkillsMiddleware(backend=local_shell_backend, sources=subagent_skills))
             subagent_middleware.extend(spec.get("middleware", []))
 
             processed_spec: SubAgent = {  # ty: ignore[missing-typed-dict-key]
@@ -279,7 +280,7 @@ def create_deep_agent(  # noqa: C901, PLR0912  # Complex graph assembly logic wi
     if resolved_memory is not None:
         deepagent_middleware.append(MemoryMiddleware(backend=backend, sources=resolved_memory))
     if skills is not None:
-        deepagent_middleware.append(SkillsMiddleware(backend=backend, sources=skills))
+        deepagent_middleware.append(SkillsMiddleware(backend=local_shell_backend, sources=skills))
     deepagent_middleware.extend(
         [
             FilesystemMiddleware(backend=backend),
@@ -398,5 +399,6 @@ def create_auperator(
         store=store,
         debug=debug,
         cache=cache,
+        skills=["/local/src/auperator/deepagents/skills"],
         **kwargs
     )

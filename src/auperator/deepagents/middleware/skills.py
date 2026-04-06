@@ -400,7 +400,7 @@ def _format_skill_annotations(skill: SkillMetadata) -> str:
     return ", ".join(parts)
 
 
-def _list_skills(backend: BackendProtocol, source_path: str) -> list[SkillMetadata]:
+def _list_skills(backend: BackendProtocol, source_path: str, route_prefix: str | None = None) -> list[SkillMetadata]:
     """List all skills from a backend source.
 
     Scans backend for subdirectories containing `SKILL.md` files, downloads
@@ -418,6 +418,7 @@ def _list_skills(backend: BackendProtocol, source_path: str) -> list[SkillMetada
     Args:
         backend: Backend instance to use for file operations
         source_path: Path to the skills directory in the backend
+        route_prefix: Optional route prefix to prepend to skill paths (for CompositeBackend routing)
 
     Returns:
         List of skill metadata from successfully parsed `SKILL.md` files
@@ -465,10 +466,26 @@ def _list_skills(backend: BackendProtocol, source_path: str) -> list[SkillMetada
         # Extract directory name from path using PurePosixPath
         directory_name = PurePosixPath(skill_dir_path).name
 
+        # Construct full skill path with route prefix for proper routing
+        # When Agent reads this path, CompositeBackend will route it correctly
+        if route_prefix:
+            # route_prefix ends with /, skill_dir_path is backend_path (without route prefix)
+            # Need to reconstruct full path: route_prefix + backend_path
+            normalized_prefix = route_prefix if route_prefix.endswith("/") else f"{route_prefix}/"
+            # skill_dir_path already starts with / from ls_info
+            # Remove the route prefix part to get the suffix
+            if skill_dir_path.startswith(normalized_prefix):
+                suffix = skill_dir_path[len(normalized_prefix):]
+                skill_md_full_path = f"{normalized_prefix}{suffix}/SKILL.md"
+            else:
+                skill_md_full_path = skill_md_path
+        else:
+            skill_md_full_path = skill_md_path
+
         # Parse metadata
         skill_metadata = _parse_skill_metadata(
             content=content,
-            skill_path=skill_md_path,
+            skill_path=skill_md_full_path,
             directory_name=directory_name,
         )
         if skill_metadata:
@@ -477,7 +494,7 @@ def _list_skills(backend: BackendProtocol, source_path: str) -> list[SkillMetada
     return skills
 
 
-async def _alist_skills(backend: BackendProtocol, source_path: str) -> list[SkillMetadata]:
+async def _alist_skills(backend: BackendProtocol, source_path: str, route_prefix: str | None = None) -> list[SkillMetadata]:
     """List all skills from a backend source (async version).
 
     Scans backend for subdirectories containing `SKILL.md` files, downloads
@@ -495,6 +512,7 @@ async def _alist_skills(backend: BackendProtocol, source_path: str) -> list[Skil
     Args:
         backend: Backend instance to use for file operations
         source_path: Path to the skills directory in the backend
+        route_prefix: Optional route prefix to prepend to skill paths
 
     Returns:
         List of skill metadata from successfully parsed `SKILL.md` files
@@ -542,10 +560,26 @@ async def _alist_skills(backend: BackendProtocol, source_path: str) -> list[Skil
         # Extract directory name from path using PurePosixPath
         directory_name = PurePosixPath(skill_dir_path).name
 
+        # Construct full skill path with route prefix for proper routing
+        # When Agent reads this path, CompositeBackend will route it correctly
+        if route_prefix:
+            # route_prefix ends with /, skill_dir_path is backend_path (without route prefix)
+            # Need to reconstruct full path: route_prefix + backend_path
+            normalized_prefix = route_prefix if route_prefix.endswith("/") else f"{route_prefix}/"
+            # skill_dir_path already starts with / from ls_info
+            # Remove the route prefix part to get the suffix
+            if skill_dir_path.startswith(normalized_prefix):
+                suffix = skill_dir_path[len(normalized_prefix):]
+                skill_md_full_path = f"{normalized_prefix}{suffix}/SKILL.md"
+            else:
+                skill_md_full_path = skill_md_path
+        else:
+            skill_md_full_path = skill_md_path
+
         # Parse metadata
         skill_metadata = _parse_skill_metadata(
             content=content,
-            skill_path=skill_md_path,
+            skill_path=skill_md_full_path,
             directory_name=directory_name,
         )
         if skill_metadata:
@@ -753,7 +787,16 @@ class SkillsMiddleware(AgentMiddleware[SkillsState, ContextT, ResponseT]):
         # Load skills from each source in order
         # Later sources override earlier ones (last one wins)
         for source_path in self.sources:
-            source_skills = _list_skills(backend, source_path)
+            # Extract route_prefix from source_path
+            # For example: "/local/src/auperator/deepagents/skills" -> route_prefix = "/local"
+            path_parts = PurePosixPath(source_path).parts
+            if len(path_parts) > 1:
+                # First component is empty (before leading /), second is route prefix
+                route_prefix = "/" + path_parts[1]
+            else:
+                route_prefix = None
+
+            source_skills = _list_skills(backend, source_path, route_prefix)
             for skill in source_skills:
                 all_skills[skill["name"]] = skill
 
@@ -789,7 +832,16 @@ class SkillsMiddleware(AgentMiddleware[SkillsState, ContextT, ResponseT]):
         # Load skills from each source in order
         # Later sources override earlier ones (last one wins)
         for source_path in self.sources:
-            source_skills = await _alist_skills(backend, source_path)
+            # Extract route_prefix from source_path
+            # For example: "/local/src/auperator/deepagents/skills" -> route_prefix = "/local"
+            path_parts = PurePosixPath(source_path).parts
+            if len(path_parts) > 1:
+                # First component is empty (before leading /), second is route prefix
+                route_prefix = "/" + path_parts[1]
+            else:
+                route_prefix = None
+
+            source_skills = await _alist_skills(backend, source_path, route_prefix)
             for skill in source_skills:
                 all_skills[skill["name"]] = skill
 
