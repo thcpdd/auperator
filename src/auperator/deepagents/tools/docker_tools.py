@@ -670,16 +670,6 @@ def stop_container(container_name: str, timeout: int = 10) -> dict:
 
 
 @tool
-def get_vector_image() -> str:
-    """Get the Docker image ID or name for Vector.
-
-    Returns:
-        str: Docker image ID or name for Vector
-    """
-    return settings.vector_image
-
-
-@tool
 def get_monitored_container() -> str:
     """Get the name of the monitored container.
 
@@ -687,6 +677,62 @@ def get_monitored_container() -> str:
         str: Name of the monitored container
     """
     return settings.monitored_container
+
+
+@tool
+def start_vector_container() -> dict:
+    """Start a Vector log aggregation container.
+
+    This is a convenience function that automatically starts Vector with optimal
+    default settings for Auperator log aggregation. No parameters required.
+
+    Returns:
+        Dictionary containing:
+            - success: bool - Whether container was started successfully
+            - container_id: str - Container ID
+            - container_name: str - Container name
+            - status: str - Container status
+            - message: str - Status message
+            - error: str | None - Error message if failed
+
+    Example:
+        >>> result = start_vector_container()
+        >>> if result['success']:
+        ...     print(f"Vector container started: {result['container_id']}")
+    """
+    try:
+        vector_image = settings.vector_image
+
+        if not vector_image:
+            return {
+                'success': False,
+                'container_id': None,
+                'container_name': None,
+                'status': None,
+                'message': None,
+                'error': "Vector image not configured. Please set VECTOR_IMAGE in your environment or .env file."
+            }
+
+        # Call start_container with Vector-specific settings
+        return start_container.invoke(
+            {
+                "docker_image": vector_image,
+                "container_name": "auperator-vector",
+                "volume_mounts": {"./vector.yaml": "/etc/vector/vector.yaml"},
+                "restart_policy": "unless-stopped"
+            }
+        )
+
+    except Exception as e:
+        logger.exception(f"Unexpected error starting Vector container: {e}")
+        return {
+            'success': False,
+            'container_id': None,
+            'container_name': None,
+            'status': None,
+            'message': None,
+            'error': f"Unexpected error: {str(e)}"
+        }
 
 
 def get_tools() -> list[BaseTool]:
@@ -699,6 +745,6 @@ def get_tools() -> list[BaseTool]:
         get_container_processes,
         start_container,
         stop_container,
-        get_vector_image,
-        get_monitored_container
+        get_monitored_container,
+        start_vector_container
     ]

@@ -237,22 +237,13 @@ sinks:
       codec: json
 ```
 
-### Step 3: Get Vector Image
+### Step 3: Test Configuration
 
-Use `get_vector_image()` to get the correct Docker image:
-
-```python
-vector_image = get_vector_image()
-```
-
-### Step 4: Test Configuration
-
-Use the `test_vector_config` tool with the image:
+Use the `test_vector_config` tool with your configuration:
 
 ```python
 result = test_vector_config(
     config_yaml=test_config,
-    docker_image=vector_image,
     test_logs=[
         '2025-01-15 10:30:05 [ERROR] Database connection failed',
         'Traceback (most recent call last):',
@@ -262,7 +253,7 @@ result = test_vector_config(
 )
 ```
 
-### Step 5: Analyze Output
+### Step 4: Analyze Output
 
 Examine `result['stdout']` to verify:
 1. **Aggregation**: Multiple input lines → Single output event
@@ -279,7 +270,7 @@ Examine `result['stdout']` to verify:
 - Incomplete stack trace → `starts_when` condition incorrect
 - Normal HTTP 200 logs → Filter condition incorrect
 
-### Step 6: Iterate if Needed
+### Step 5: Iterate if Needed
 
 If output is incorrect:
 1. **Aggregation issues**: Adjust `starts_when` condition
@@ -288,7 +279,7 @@ If output is incorrect:
 
 Re-test until configuration is correct.
 
-### Step 7: Generate Production Config
+### Step 6: Generate Production Config
 
 Convert the test configuration to production configuration manually:
 
@@ -344,33 +335,18 @@ sinks:
 
 Use the `write_file` tool to save the production configuration.
 
-### Step 8: Deploy Vector
-
-**Important**: Follow the path mapping rules below when deploying.
-
-**Path mapping rules**:
-- **Save config**: Use `/local/` prefix (e.g., `/local/vector.yaml`)
-- **Mount volume**: Use relative path (e.g., `./vector.yaml`)
+### Step 7: Deploy Vector
 
 **Deployment steps**:
 
-1. Get Vector image:
-   ```python
-   vector_image = get_vector_image()
-   ```
-
-2. Save production config (use `/local/` prefix):
+1. Save production config to `/local` directory:
    ```python
    write_file("/local/vector.yaml", production_config)
    ```
 
-3. Start container (mount with relative path):
+2. Start Vector container (no parameters needed):
    ```python
-   result = start_container(
-       docker_image=vector_image,
-       container_name="auperator-vector",
-       volume_mounts={"./vector.yaml": "/etc/vector/vector.yaml"}
-   )
+   result = start_vector_container()
    ```
 
 ## VRL (Vector Remap Language) Tips
@@ -456,16 +432,14 @@ to_string(.message) ?? ""
 
 ### Vector Tools
 - **test_vector_config**: Test configuration with sample logs
-- **get_vector_image**: Get the Docker image ID or name for Vector (use this to get the correct image for testing and deployment)
 
 ### Docker Tools (for deployment and monitoring)
+- **start_vector_container**: Start a Vector container
 - **get_monitored_container**: Get the name of the monitored container (use this when generating production config)
-- **start_container**: Start a Docker container (for Vector deployment)
 - **stop_container**: Stop a running Docker container
 
 ### Filesystem Tools
 - **write_file**: Write the production configuration to a file
 
 **Important**:
-- Always use `get_vector_image()` to get the correct Vector Docker image before running tests or deploying. Do not hardcode image names in your commands.
 - Always use `get_monitored_container()` to get the monitored container name when generating production config. Do not hardcode container names.

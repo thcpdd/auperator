@@ -21,7 +21,6 @@ logger = logging.getLogger(__name__)
 def test_vector_config(
     config_yaml: str,
     test_logs: list[str],
-    docker_image: str = "",
     timeout: int = 20
 ) -> dict:
     """Test a Vector configuration by running it in a Docker container with test logs.
@@ -33,7 +32,6 @@ def test_vector_config(
     Args:
         config_yaml: Vector YAML configuration (should use stdin source and console sink)
         test_logs: List of log lines to test (each line is one log entry)
-        docker_image: Docker image ID or name for Vector
         timeout: Timeout in seconds for the test (default: 10)
 
     Returns:
@@ -93,7 +91,7 @@ def test_vector_config(
             '-i',  # 交互式 stdin
             f'-v={config_path}:/etc/vector/vector.yaml:ro',
             '--name', 'vector-test',
-            docker_image
+            settings.vector_image
         ]
 
         logger.info(f"Running Vector test with {len(test_logs)} log lines")
