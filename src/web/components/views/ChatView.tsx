@@ -465,7 +465,7 @@ export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder="输入消息... (Enter 发送, Shift+Enter 换行)"
-                  className="min-h-[75px] max-h-[200px] resize-none pr-28
+                  className="min-h-[75px] max-h-[200px] resize-none pr-36
                     border border-border/40
                     bg-muted/30
                     rounded-xl
@@ -477,11 +477,12 @@ export function ChatView({ initialThreadId, onThreadIdChange }: ChatViewProps) {
                     focus:shadow-[0_4px_16px_-2px_rgba(0,0,0,0.12)]
                     transition-all duration-200 ease-out
                     hover:bg-muted/40
-                    hover:shadow-[0_4px_12px_-2px_rgba(0,0,0,0.10)]"
+                    hover:shadow-[0_4px_12px_-2px_rgba(0,0,0,0.10)]
+                    scrollbar-gutter-stable"
                 />
 
                 {/* Integrated Button Container */}
-                <div className="absolute right-2 bottom-2 flex gap-1.5">
+                <div className="absolute right-5 bottom-2 flex gap-1.5">
                   {isLoading ? (
                     <>
                       {/* Queue Button */}
