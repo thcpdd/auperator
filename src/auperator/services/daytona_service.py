@@ -8,7 +8,8 @@ from daytona import (
     Daytona,
     DaytonaConfig, 
     AsyncSandbox, 
-    Sandbox
+    Sandbox,
+    CreateSandboxFromSnapshotParams
 )
 
 from auperator.config import settings
@@ -105,7 +106,10 @@ class DaytonaService:
 
         try:
             assert self._daytona is not None
-            sandbox = await self._daytona.create(timeout=settings.daytona_sandbox_timeout)
+            sandbox = await self._daytona.create(
+                CreateSandboxFromSnapshotParams(auto_delete_interval=60),
+                timeout=settings.daytona_sandbox_timeout
+            )
             logger.info(f"Sandbox created: {sandbox.id}")
 
             # Auto-configure Git authentication for GitHub
@@ -497,7 +501,10 @@ def get_or_create_sync_daytona_sandbox() -> Sandbox:
         if sandbox.state == "started":
             return sandbox
 
-    sandbox = daytona_client.create(timeout=settings.daytona_sandbox_timeout)
+    sandbox = daytona_client.create(
+        CreateSandboxFromSnapshotParams(auto_delete_interval=60),
+        timeout=settings.daytona_sandbox_timeout
+    )
 
     sandbox.process.exec('git config --global user.name "Auperator Bot"')
     sandbox.process.exec('git config --global user.email "auperator@example.com"')
