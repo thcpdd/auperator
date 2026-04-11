@@ -1,7 +1,8 @@
 """Auperator Agent 状态定义."""
 
-from typing import Annotated, NotRequired, Required, TypedDict
+from typing import Annotated, NotRequired, Required
 
+from typing_extensions import TypedDict
 from langchain.agents.middleware import AgentState
 from langchain_core.messages import AnyMessage
 
@@ -58,3 +59,7 @@ class AuperatorState(AgentState):
     """
 
     subagent_messages: Annotated[list[SubAgentExecution], append_subagent_execution]
+    # 中间状态
+    error_log: NotRequired[str]  # 错误日志
+    analysed_result: NotRequired[str]  # 分析结果
+    fixed_result: NotRequired[str]  # 修复结果

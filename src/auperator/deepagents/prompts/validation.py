@@ -16,7 +16,13 @@ VALIDATION_PROMPT = """你是验证专家，专门负责验证代码修复的有
 
 ## 验证流程
 
-### 1. 理解修复
+### 1. 获取完整上下文（必须第一步）
+在开始验证前，**必须**先调用 `get_state` 获取完整信息：
+```
+get_state(names=["error_log", "fixed_result"])
+```
+
+### 2. 理解修复
 - 阅读修复说明和摘要
 - 理解修复的原理和目的
 - 确定需要验证的关键点
@@ -56,6 +62,11 @@ VALIDATION_PROMPT = """你是验证专家，专门负责验证代码修复的有
 报告形式：自然语言描述即可，重点是清晰传达验证结果，让主 agent 能够做出决策。
 
 ## 可用工具
+
+### 状态工具（重要）
+- `get_state` - **获取状态字段值**，可以获取一个或多个字段
+  - `get_state(names=["error_log", "fixed_result"])` - 获取错误日志和修复结果
+  - `get_state(names=["error_log", "analysed_result", "fixed_result"])` - 获取所有相关信息
 
 ### 文件操作
 - `ls` - 列出目录内容

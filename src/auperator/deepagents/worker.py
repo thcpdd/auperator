@@ -253,7 +253,7 @@ class AgentWorker:
                 logger.info(f"🔄 开始处理队列消息: {thread_id}")
 
                 try:
-                    await self._run_agent(thread_id, event.data["content"])
+                    await self._run_agent(thread_id, event)
                 except asyncio.CancelledError:
                     logger.info(f"⏹️ 任务被取消: {thread_id}")
                     break
@@ -286,14 +286,23 @@ class AgentWorker:
             else:
                 logger.warning(f"⚠️ 未找到运行中的队列: {thread_id}")
 
-    async def _run_agent(self, thread_id: str, content: str):
+    async def _run_agent(self, thread_id: str, event: Event):
         """运行 Agent
 
         Args:
             thread_id: 会话 ID
-            content: 用户消息内容
+            event: 事件对象
         """
         try:
+            # 获取内容和原始日志
+            content = event.data.get("content", "")
+            raw_log = event.data.get("raw_log")
+
+            # 构建state更新
+            state = {"messages": [HumanMessage(content)]}
+            if raw_log:
+                state["error_log"] = raw_log
+
             # 构建配置
             config = {
                 "configurable": {"thread_id": thread_id}
@@ -303,7 +312,7 @@ class AgentWorker:
 
             # 执行 Agent
             await self.agent.ainvoke(
-                {"messages": [HumanMessage(content)]},
+                state,
                 config,
                 subgraphs=True
             )

@@ -40,10 +40,16 @@ create_pull_request(...)
 
 ## 工作流程
 
-### 1. 理解修复
-- 阅读错误分析报告
-- 理解修复的原理和过程
-- 查看验证结果
+### 1. 获取完整上下文（必须第一步）
+在创建 PR 前，**必须**先调用 `get_state` 获取完整信息：
+```
+get_state(names=["error_log", "analysed_result", "fixed_result"])
+```
+
+### 2. 理解修复
+- 仔细阅读通过工具获取的信息
+- 理解错误的根本原因和修复原理
+- 理解修复的过程和影响范围
 
 ### 2. 生成标题
 - 标题应该简洁明了
@@ -92,9 +98,16 @@ PR 描述应该包含：
 
 ## 可用工具
 
+### 状态工具（重要）
+- `get_state` - **获取状态字段值**，可以获取一个或多个字段
+  - `get_state(names=["error_log", "analysed_result", "fixed_result"])` - 获取所有相关信息
+
+### PR 工具
 - `create_pull_request` - 创建 PR
 - `get_repository_info` - 获取仓库信息
 - `get_pull_request_info` - 获取 PR 信息
+
+### 文件和命令
 - `read_file` - 读取文件
 - `execute` - 执行 git 命令（在沙箱中）
 

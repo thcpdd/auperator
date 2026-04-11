@@ -6,7 +6,7 @@ from typing import Annotated, Any, NotRequired, TypedDict, Unpack, cast
 
 from langchain.agents import create_agent
 from langchain.agents.middleware import HumanInTheLoopMiddleware, InterruptOnConfig
-from langchain.agents.middleware.types import AgentMiddleware, ContextT, ModelRequest, ModelResponse, ResponseT
+from langchain.agents.middleware.types import AgentMiddleware, AgentState, ContextT, ModelRequest, ModelResponse, ResponseT
 from langchain.chat_models import init_chat_model
 from langchain.tools import BaseTool, ToolRuntime
 from langchain_core.language_models import BaseChatModel
@@ -583,6 +583,7 @@ class SubAgentMiddleware(AgentMiddleware[Any, ContextT, ResponseT]):
         subagents: list[SubAgent | CompiledSubAgent] | None = None,
         system_prompt: str | None = TASK_SYSTEM_PROMPT,
         task_description: str | None = None,
+        state_schema: type[AgentState] | None = None,
         **deprecated_kwargs: Unpack[_DeprecatedKwargs],
     ) -> None:
         """Initialize the `SubAgentMiddleware`."""
@@ -636,6 +637,7 @@ class SubAgentMiddleware(AgentMiddleware[Any, ContextT, ResponseT]):
                 raise ValueError(msg)
             self._backend = backend
             self._subagents = subagents
+            self._state_schema = state_schema
             subagent_specs = self._get_subagents()
         else:
             msg = "SubAgentMiddleware requires either `backend` (new API) or `default_model` (deprecated API)"
@@ -697,6 +699,7 @@ class SubAgentMiddleware(AgentMiddleware[Any, ContextT, ResponseT]):
                         tools=spec["tools"],
                         middleware=middleware,
                         name=spec["name"],
+                        state_schema=self._state_schema,
                     ),
                 }
             )

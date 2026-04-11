@@ -287,6 +287,7 @@ def create_deep_agent(  # noqa: C901, PLR0912  # Complex graph assembly logic wi
             SubAgentMiddleware(
                 backend=backend,
                 subagents=all_subagents,
+                state_schema=AuperatorState,
             ),
             create_summarization_middleware(model, backend),
             PatchToolCallsMiddleware(),
@@ -367,28 +368,28 @@ def create_auperator(
             "description": "分析错误日志、收集上下文、分类错误类型、评估严重程度、生成错误分析报告",
             "system_prompt": LOG_ANALYSIS_PROMPT,
             "model": model,
-            "tools": ToolRegistry.get("memory", "docker"),
+            "tools": ToolRegistry.get("memory", "docker", "state"),
         },
         {
             "name": "fix",
             "description": "根据错误分析报告定位问题代码、实施安全有效的修复、生成修复说明",
             "system_prompt": FIX_PROMPT,
             "model": model,
-            "tools": [],
+            "tools": ToolRegistry.get("state"),
         },
         {
             "name": "validation",
             "description": "运行测试套件、验证修复效果、检测回归问题、评估修复质量",
             "system_prompt": VALIDATION_PROMPT,
             "model": model,
-            "tools": [],
+            "tools": ToolRegistry.get("state"),
         },
         {
             "name": "pr",
             "description": "生成 PR 描述、创建有意义的 PR 标题、创建 Pull Request",
             "system_prompt": PR_PROMPT,
             "model": model,
-            "tools": ToolRegistry.get("pr"),
+            "tools": ToolRegistry.get("pr", "state"),
         },
     ]
 

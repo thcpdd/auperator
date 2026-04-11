@@ -258,9 +258,24 @@ class EventAutoSendMiddleware(AgentMiddleware[AgentState, ContextT, ResponseT]):
 
         # Send tool result event (after execution)
         try:
+            content = None
+
             if isinstance(result, ToolMessage):
                 # Extract content from ToolMessage
                 content = result.content
+            elif isinstance(result, Command):
+                # Extract content from Command's messages
+                # Command.update 可能包含 "messages" 键
+                messages = result.update.get("messages", [])
+                if messages and len(messages) > 0:
+                    # 获取第一条消息的内容（通常是 ToolMessage）
+                    first_message = messages[0]
+                    if isinstance(first_message, ToolMessage):
+                        content = first_message.content
+                    elif isinstance(first_message, str):
+                        content = first_message
+
+            if content is not None:
                 tool_result_event = Event.create_tool_event(
                     thread_id=thread_id,
                     tool=tool_name,

@@ -66,6 +66,7 @@ class EventHandler(BaseLogHandler):
             user_event = Event.create_user_event(
                 thread_id=thread_id,
                 content=prompt,
+                raw_log=entry.message,  # 传递完整日志
             )
             await self.event_center.publish_event(user_event)
             logger.info(f"✅ 已发布 user 事件: {user_event.event_id}")
