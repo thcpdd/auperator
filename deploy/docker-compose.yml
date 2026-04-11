@@ -1,0 +1,150 @@
+services:
+  # ============================================
+  # Redis 服务
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    container_name: auperator-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - auperator-network
+
+  # ============================================
+  # Qdrant 向量数据库
+  # ============================================
+  qdrant:
+    image: qdrant/qdrant:v1.17.0
+    container_name: auperator-qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"  # HTTP API
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      - QDRANT__LOG_LEVEL=INFO
+      - QDRANT__SERVICE__HTTP_PORT=6333
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - auperator-network
+
+  # ============================================
+  # Auperator API 服务
+  # ============================================
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: auperator-api
+    restart: unless-stopped
+    ports:
+      - "${API_PORT:-7000}:7000"
+    volumes:
+      - ../src:/app/src
+      - ../.env:/app/.env:ro
+      - ../pyproject.toml:/app/pyproject.toml:ro
+      - auperator_db:/app/auperator.db.sqlite3
+      - auperator_drain3:/app/drain3.json
+    env_file:
+      - ../.env
+    depends_on:
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - auperator-network
+
+  # ============================================
+  # Auperator Web UI
+  # ============================================
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    container_name: auperator-web
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=production
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - auperator-network
+
+  # ============================================
+  # Vector 日志收集服务
+  # ============================================
+  vector:
+    image: timberio/vector:0.53.0-alpine
+    container_name: auperator-vector
+    restart: unless-stopped
+    volumes:
+      - ../vector.yaml:/etc/vector/vector.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - VECTOR_LOG=info
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8686/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - auperator-network
+    profiles:
+      - vector  # 使用 --profile vector 启动此服务
+
+# ============================================
+# 网络配置
+# ============================================
+networks:
+  auperator-network:
+    driver: bridge
+    name: auperator-network
+
+# ============================================
+# 卷配置
+# ============================================
+volumes:
+  redis_data:
+    name: auperator-redis-data
+  qdrant_data:
+    name: auperator-qdrant-data
+  vector_data:
+    name: auperator-vector-data
+  auperator_db:
+    name: auperator-sqlite-db
+  auperator_drain3:
+    name: auperator-drain3-state
