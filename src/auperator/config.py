@@ -159,6 +159,11 @@ class Settings(BaseSettings):
     # Vector 配置
     vector_image: str = Field(default="", alias="VECTOR_IMAGE")
 
+    # Telegram 配置
+    telegram_bot_token: str = Field(default="", alias="TELEGRAM_BOT_TOKEN")
+    telegram_webhook_url: str = Field(default="", alias="TELEGRAM_WEBHOOK_URL")
+    telegram_webhook_secret: str | None = Field(default=None, alias="TELEGRAM_WEBHOOK_SECRET")
+
     @field_validator("log_level")
     @classmethod
     def validate_log_level(cls, v: str) -> str:

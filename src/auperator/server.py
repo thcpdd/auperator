@@ -83,6 +83,24 @@ async def lifespan(_: FastAPI):
         consumer_task = asyncio.create_task(log_consumer())
         logger.info("✅ 日志消费后台任务已启动")
 
+        # 启动 Telegram 消费者后台任务（如果配置了 Telegram）
+        if settings.telegram_bot_token and global_state.telegram_service:
+            await global_state.telegram_service.start_consumer()
+            logger.info("✅ Telegram 消费者后台任务已启动")
+
+            # 自动设置 Webhook（如果配置了 URL）
+            if settings.telegram_webhook_url:
+                result = await global_state.telegram_service.set_webhook(
+                    webhook_url=settings.telegram_webhook_url,
+                    secret_token=settings.telegram_webhook_secret
+                )
+                if result.get("ok"):
+                    logger.info(f"✅ Telegram Webhook 已自动设置: {settings.telegram_webhook_url}")
+                else:
+                    logger.warning(f"⚠️ Telegram Webhook 设置失败: {result.get('error')}")
+        else:
+            logger.info("⚠️ Telegram Bot Token 未配置，跳过 Telegram 消费者")
+
         yield
 
     finally:
@@ -100,6 +118,10 @@ async def lifespan(_: FastAPI):
                 await consumer_task
             except asyncio.CancelledError:
                 pass
+
+        # 停止 Telegram 消费者
+        if global_state.telegram_service:
+            await global_state.telegram_service.stop_consumer()
 
         await global_state.cleanup_all()
         await close_db()

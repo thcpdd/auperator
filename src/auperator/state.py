@@ -11,6 +11,7 @@ from redis.asyncio import Redis as AsyncRedis
 from auperator.config import settings
 from auperator.services.daytona_service import DaytonaService
 from auperator.services.drain3_service import Drain3Service
+from auperator.services.telegram_service import TelegramService
 from auperator.services.memory_service import (
     DEFAULT_MEMORY_WEIGHTS,
     MEMORY_SECTIONS
@@ -38,6 +39,8 @@ class GlobalState:
         self.event_center: EventCenter | None = None
         # Agent Worker
         self.agent_worker: AgentWorker | None = None
+        # Telegram 服务
+        self.telegram_service: TelegramService | None = None
 
     async def initialize_all(self):
         """初始化所有服务"""
@@ -69,6 +72,12 @@ class GlobalState:
             logger.info("Initializing Event Center...")
             self.event_center = EventCenter()
             logger.info("Event Center initialized")
+
+        # 初始化 Telegram 服务（依赖 event_center）
+        if self.telegram_service is None:
+            logger.info("Initializing Telegram service...")
+            self.telegram_service = TelegramService(self.event_center)
+            logger.info("Telegram service initialized")
 
     async def _initialize_daytona(self):
         """初始化 Daytona 服务"""

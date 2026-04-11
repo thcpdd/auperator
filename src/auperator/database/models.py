@@ -17,6 +17,7 @@ class ConversationSource(str, Enum):
     """对话来源枚举"""
     USER = "user"  # 用户主动发起
     LOG = "log"    # 错误日志自动发起
+    TELEGRAM = "telegram"  # Telegram Bot 发起
 
 
 class Conversation(Base):

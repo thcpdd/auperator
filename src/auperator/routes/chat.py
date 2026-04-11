@@ -6,7 +6,7 @@ from typing import List, Any
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func
-from fastapi import APIRouter, Depends, HTTPException, status, Body
+from fastapi import APIRouter, Depends, HTTPException, status, Body, Request
 
 from auperator.config import settings
 from auperator.database.db import get_db_session
@@ -224,7 +224,7 @@ async def list_conversations(db: AsyncSession = Depends(get_db_session)):
                 id=conv.id,
                 thread_id=conv.thread_id,
                 title=conv.title,
-                source=conv.source,
+                source="user" if conv.source == "telegram" else conv.source,
                 created_at=conv.created_at,
                 updated_at=conv.updated_at,
             )
@@ -434,4 +434,93 @@ async def get_queue_status(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"查询队列状态失败: {str(e)}",
+        )
+
+
+@router.post("/telegram/webhook")
+async def telegram_webhook(
+    request: Request,
+    db: AsyncSession = Depends(get_db_session),
+    event_center: EventCenter = Depends(get_event_center),
+):
+    """Telegram Webhook 接收接口
+
+    接收 Telegram Bot 发送的消息，并转发给 Agent 处理
+
+    Args:
+        request: FastAPI 请求对象
+        db: 数据库会话
+        event_center: 事件中心
+
+    Returns:
+        dict: 成功响应
+    """
+    # 验证 Telegram Bot Token
+    if not settings.telegram_bot_token:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Telegram Bot Token 未配置"
+        )
+
+    try:
+        # 解析 Telegram Webhook 数据
+        update = await request.json()
+        # 提取消息信息
+        message = update.get("message", {})
+        if not message:
+            return {"ok": True}
+
+        text = message.get("text", "")
+
+        # 跳过 start 命令
+        if text == "start":
+            return {"ok": True}
+
+        chat = message.get("chat", {})
+        from_user = message.get("from", {})
+
+        chat_id = chat.get("id")
+        user_id = from_user.get("id")
+        user_name = from_user.get("first_name", "User")
+
+        if not text or not chat_id:
+            logger.warning(f"⚠️ 收到无效的 Telegram 消息: {message}")
+            return {"ok": True}
+
+        logger.info(f"📥 收到 Telegram 消息: chat_id={chat_id}, user={user_name}, text={text[:50]}...")
+
+        # 直接使用 chat_id 作为 thread_id
+        thread_id = str(chat_id)
+
+        # 生成对话标题
+        title = f"Telegram: {user_name}"
+        if len(text) > 20:
+            title += f" - {text[:20]}..."
+        else:
+            title += f" - {text}"
+
+        # 创建或获取对话
+        thread_id, is_new = await Conversation.get_or_create(
+            session=db,
+            thread_id=thread_id,
+            title=title,
+            source=ConversationSource.TELEGRAM,
+        )
+
+        # 发布 USER 事件到 EventCenter
+        user_event = Event.create_user_event(
+            thread_id=thread_id,
+            content=text,
+            telegram_chat_id=chat_id,
+            telegram_user_name=user_name,
+        )
+        await event_center.publish_event(user_event)
+
+        return {"ok": True}
+
+    except Exception as e:
+        logger.exception(f"❌ Telegram Webhook 处理失败: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"处理 Telegram 消息失败: {str(e)}",
         )
