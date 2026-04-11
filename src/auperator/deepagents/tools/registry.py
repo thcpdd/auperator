@@ -13,8 +13,19 @@
     # 获取多个类别的工具
     tools = ToolRegistry.get("docker", "pr", "memory")
 
+    # 获取指定类别下的指定工具
+    tool = ToolRegistry.get_tool("docker", "get_container_info")
+    if tool:
+        tool.invoke({"container_id": "abc123"})
+
     # 查看工具信息
     info = ToolRegistry.info()
+
+    # 查看所有可用类别
+    categories = ToolRegistry.categories()
+
+    # 查看某个类别下的工具名称
+    tool_names = ToolRegistry.list_tools("docker")
 
 自动发现机制:
     ToolRegistry 会自动扫描 tools 目录下以 _tools.py 结尾的模块，
@@ -150,6 +161,36 @@ class ToolRegistry:
             result.extend(cls._registry[category])
 
         return result
+
+    @classmethod
+    def get_tool(cls, category: str, name: str) -> BaseTool | None:
+        """获取指定类别下的指定工具
+
+        Args:
+            category: 工具类别（如 "docker", "pr", "memory"）
+            name: 工具名称
+
+        Returns:
+            匹配的工具，如果未找到则返回 None
+
+        Examples:
+            >>> # 获取单个工具
+            >>> tool = ToolRegistry.get_tool("docker", "get_container_info")
+            >>> if tool:
+            ...     tool.invoke({"container_id": "abc123"})
+        """
+        cls._initialize()
+
+        if category not in cls._registry:
+            logger.warning(f"未知的工具类别: {category}")
+            return None
+
+        for tool in cls._registry[category]:
+            if tool.name == name:
+                return tool
+
+        logger.warning(f"类别 '{category}' 中未找到工具: {name}")
+        return None
 
     @classmethod
     def get_all(cls) -> list[BaseTool]:

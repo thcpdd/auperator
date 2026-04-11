@@ -368,7 +368,7 @@ def create_auperator(
             "description": "分析错误日志、收集上下文、分类错误类型、评估严重程度、生成错误分析报告",
             "system_prompt": LOG_ANALYSIS_PROMPT,
             "model": model,
-            "tools": ToolRegistry.get("memory", "docker", "state"),
+            "tools": ToolRegistry.get("docker", "state") + [ToolRegistry.get_tool("memory", "retrieve_memories")],
         },
         {
             "name": "fix",
@@ -382,14 +382,14 @@ def create_auperator(
             "description": "运行测试套件、验证修复效果、检测回归问题、评估修复质量",
             "system_prompt": VALIDATION_PROMPT,
             "model": model,
-            "tools": ToolRegistry.get("state"),
+            "tools": [ToolRegistry.get_tool("state", "get_state")],
         },
         {
             "name": "pr",
             "description": "生成 PR 描述、创建有意义的 PR 标题、创建 Pull Request",
             "system_prompt": PR_PROMPT,
             "model": model,
-            "tools": ToolRegistry.get("pr", "state"),
+            "tools": ToolRegistry.get("pr") + [ToolRegistry.get_tool("state", "get_state")],
         },
     ]
 
