@@ -8,6 +8,7 @@ import logging
 import tempfile
 import os
 import subprocess
+import uuid
 
 from langchain.tools import tool, BaseTool
 
@@ -85,12 +86,13 @@ def test_vector_config(
         # 2. 准备输入数据（每行一个日志）
         input_data = '\n'.join(test_logs)
 
-        # 3. 构建 Docker 命令
+        # 3. 构建 Docker 命令（使用唯一容器名称避免并发冲突）
+        container_name = f'vector-test-{uuid.uuid4().hex[:8]}'
         cmd = [
             'docker', 'run', '--rm',
             '-i',  # 交互式 stdin
             f'-v={config_path}:/etc/vector/vector.yaml:ro',
-            '--name', 'vector-test',
+            '--name', container_name,
             settings.vector_image
         ]
 
