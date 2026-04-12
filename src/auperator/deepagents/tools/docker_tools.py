@@ -6,9 +6,12 @@ for error diagnosis and remediation.
 
 import logging
 import os
+import io
+import tarfile
 from typing import Optional
 
 import docker
+from docker.models.containers import Container
 from langchain.tools import tool, BaseTool
 
 from auperator.config import settings
@@ -37,6 +40,21 @@ def get_docker_client():
                 "Ensure Docker is running and accessible."
             ) from e
     return _docker_client
+
+
+def copy_to_container(container: Container, local_path: str, remote_path: str):
+    """
+    将本地小文件拷贝进容器
+    remote_path: 容器内的目标目录 (例如 '/etc/vector/')
+    """
+    stream = io.BytesIO()
+    with tarfile.open(fileobj=stream, mode='w') as tar:
+        # gettarinfo 会自动处理文件大小和权限
+        with open(local_path, 'rb') as f:
+            info = tar.gettarinfo(fileobj=f, arcname=os.path.basename(local_path))
+            tar.addfile(info, f)
+    
+    return container.put_archive(remote_path, stream.getvalue())
 
 
 @tool
@@ -714,14 +732,38 @@ def start_vector_container() -> dict:
             }
 
         # Call start_container with Vector-specific settings
-        return start_container.invoke(
+        container_name = "auperator-vector"
+        result = start_container.invoke(
             {
                 "docker_image": vector_image,
-                "container_name": "auperator-vector",
-                "volume_mounts": {"./vector.yaml": "/etc/vector/vector.yaml"},
+                "container_name": container_name,
                 "restart_policy": "unless-stopped"
             }
         )
+        if not result['success']:
+            return result
+        
+        client = get_docker_client()
+
+        # Copy Vector config to container
+        container = client.containers.get(container_name)
+        res = copy_to_container(container, "./vector.yaml", "/etc/vector/")
+
+        if not res:
+            return {
+                'success': False,
+                'error': f"Failed to copy Vector config to container"
+            }
+
+        # Restart Vector container
+        container.restart()
+
+        return {
+            'success': True,
+            'container_name': container_name,
+            'status': container.status,
+            'message': f"Vector container '{container_name}' started successfully",
+        }
 
     except Exception as e:
         logger.exception(f"Unexpected error starting Vector container: {e}")
