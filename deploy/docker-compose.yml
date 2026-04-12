@@ -33,8 +33,10 @@ services:
     environment:
       - QDRANT__LOG_LEVEL=INFO
       - QDRANT__SERVICE__HTTP_PORT=6333
+    env_file:
+      - ../.env
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -47,8 +49,8 @@ services:
   # ============================================
   api:
     build:
-      context: .
-      dockerfile: Dockerfile.api
+      context: ..
+      dockerfile: deploy/Dockerfile.api
     container_name: auperator-api
     restart: unless-stopped
     ports:
@@ -57,8 +59,6 @@ services:
       - ../src:/app/src
       - ../.env:/app/.env:ro
       - ../pyproject.toml:/app/pyproject.toml:ro
-      - auperator_db:/app/auperator.db.sqlite3
-      - auperator_drain3:/app/drain3.json
     env_file:
       - ../.env
     depends_on:
@@ -80,8 +80,8 @@ services:
   # ============================================
   web:
     build:
-      context: .
-      dockerfile: Dockerfile.web
+      context: ..
+      dockerfile: deploy/Dockerfile.web
     container_name: auperator-web
     restart: unless-stopped
     ports:
@@ -144,7 +144,3 @@ volumes:
     name: auperator-qdrant-data
   vector_data:
     name: auperator-vector-data
-  auperator_db:
-    name: auperator-sqlite-db
-  auperator_drain3:
-    name: auperator-drain3-state

@@ -17,8 +17,8 @@ WORKDIR /app
 RUN npm install -g pnpm
 
 # 复制 package 文件
-COPY ../src/web/package*.json ./
-COPY ../src/web/pnpm-lock.yaml* ./
+COPY src/web/package*.json ./
+COPY src/web/pnpm-lock.yaml* ./
 
 # 安装依赖
 RUN pnpm install --frozen-lockfile
@@ -30,12 +30,12 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# 安装 pnpm
+# 安装 pnpm（确保有完整的 pnpm 环境）
 RUN npm install -g pnpm
 
 # 从 deps 阶段复制 node_modules
 COPY --from=deps /app/node_modules ./node_modules
-COPY ../src/web . .
+COPY src/web . .
 
 # 声明构建参数
 ARG NEXT_PUBLIC_API_BASE_URL=/api
@@ -44,10 +44,10 @@ ARG NEXT_PUBLIC_API_BASE_URL=/api
 # NEXT_PUBLIC_ 前缀的变量会被嵌入到客户端代码中
 ENV NEXT_TELEMETRY_DISABLED=1 \
     NODE_ENV=production \
-    NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL} \
+    NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
 
 # 构建应用
-RUN pnpm run build
+RUN pnpm build
 
 # ============================================
 # Stage 3: Runner

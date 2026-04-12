@@ -2,9 +2,9 @@
 
 import { useSearchParams, useRouter } from "next/navigation";
 import { ChatView } from "@/components/views/ChatView";
-import { useMemo } from "react";
+import { useMemo, Suspense } from "react";
 
-export default function ChatPage() {
+function ChatPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -22,3 +22,12 @@ export default function ChatPage() {
 
   return <ChatView initialThreadId={threadId} onThreadIdChange={handleThreadIdChange} />;
 }
+
+export default function ChatPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
+      <ChatPageContent />
+    </Suspense>
+  );
+}
+
