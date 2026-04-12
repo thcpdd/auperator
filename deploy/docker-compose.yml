@@ -51,6 +51,7 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile.api
+    image: auperator-api:latest
     container_name: auperator-api
     restart: unless-stopped
     ports:
@@ -82,6 +83,7 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile.web
+    image: auperator-web:latest
     container_name: auperator-web
     restart: unless-stopped
     ports:
