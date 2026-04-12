@@ -1,445 +1,720 @@
 # Auperator 部署文档
 
-## 项目介绍
+## 目录
 
-Auperator 是一个智能运维助手，用于监控和管理容器化应用。它结合了 AI 技术，能够自动分析日志、处理事件，并提供智能运维建议。
+- [快速开始](#快速开始)
+- [项目结构](#项目结构)
+- [环境要求](#环境要求)
+- [部署步骤](#部署步骤)
+- [服务架构](#服务架构)
+- [配置详解](#配置详解)
+- [服务管理](#服务管理)
+- [Nginx 配置](#nginx-配置)
+- [数据持久化](#数据持久化)
+- [故障排查](#故障排查)
+- [性能优化](#性能优化)
+- [安全配置](#安全配置)
+- [备份恢复](#备份恢复)
+- [版本更新](#版本更新)
+
+---
+
+## 快速开始
+
+```bash
+# 1. 克隆仓库
+git clone https://github.com/thcpdd/auperator.git
+cd auperator
+
+# 2. 配置环境变量
+cp .env.example .env
+vim .env  # 填写必要的 API 密钥
+
+# 3. 启动服务
+cd deploy
+docker compose up -d --build
+
+# 4. 访问
+open http://localhost:3000
+```
+
+---
 
 ## 项目结构
 
 ```
-auperator/
-├── src/             # 源代码目录
-│   ├── auperator/   # 后端代码
-│   │   ├── collector/    # 日志收集模块
-│   │   ├── database/     # 数据库模块
-│   │   ├── deepagents/   # AI 代理模块
-│   │   ├── events/       # 事件系统
-│   │   ├── routes/       # API 路由
-│   │   ├── schemas/      # 数据模型
-│   │   ├── services/     # 服务模块
-│   │   ├── utils/        # 工具函数
-│   │   └── server.py     # 服务器入口
-│   └── web/         # 前端代码
-│       ├── app/          # Next.js 应用
-│       ├── components/   # 前端组件
-│       ├── hooks/        # React 钩子
-│       └── lib/          # 前端库函数
-├── deploy/          # 部署文件目录
-│   ├── docker-compose.yml    # Docker 编排文件
-│   ├── Dockerfile.api        # API 服务 Dockerfile
-│   ├── Dockerfile.web        # Web 服务 Dockerfile
-│   └── nginx.conf            # Nginx 配置
-├── .env.example     # 环境变量示例
-├── vector.yaml      # Vector 配置文件
-└── pyproject.toml   # Python 项目配置
+deploy/
+├── docker-compose.yml    # Docker Compose 编排配置
+├── docker-compose.prod.yml  # 生产环境配置（可选）
+├── Dockerfile.api        # API 服务多阶段构建
+├── Dockerfile.web       # Web UI 多阶段构建
+├── nginx.conf           # Nginx 反向代理配置
+└── README.md            # 本文档
+
+根目录
+├── .env                 # 环境变量配置
+├── .env.example         # 环境变量模板
+├── vector.yaml          # Vector 日志采集配置
+├── pyproject.toml       # Python 项目配置
+├── src/
+│   └── auperator/       # 后端源码
+│   └── web/             # 前端源码
+└── docs/                # 文档目录
 ```
+
+---
 
 ## 环境要求
 
-- **Docker**：版本 20.10 或更高
-- **Docker Compose**：版本 1.29 或更高
-- **Git**：用于克隆仓库
-- **内存**：至少 4GB（推荐 8GB 以上）
-- **磁盘空间**：至少 20GB
-- **网络**：能够访问 Docker Hub 和必要的 API 服务
+| 要求 | 最低 | 推荐 |
+|------|------|------|
+| Docker | 20.10+ | 24.0+ |
+| Docker Compose | 1.29+ | 2.20+ |
+| CPU | 2 核 | 4 核+ |
+| 内存 | 4 GB | 8 GB+ |
+| 磁盘 | 20 GB | 50 GB+ SSD |
+
+### 必要配置
+
+| 配置项 | 说明 |
+|--------|------|
+| `OPENAI_API_KEY` | OpenAI API 密钥（必须） |
+| `QDRANT_URL` | Qdrant 服务地址（默认 http://qdrant:6333，容器内使用） |
+
+---
 
 ## 部署步骤
 
-### 1. 克隆仓库
+### 1. 克隆并进入目录
 
 ```bash
 git clone https://github.com/thcpdd/auperator.git
-cd auperator
+cd auperator/deploy
 ```
 
 ### 2. 配置环境变量
 
-**创建环境变量文件：**
-
 ```bash
-cp .env.example .env
+cp ../.env.example ../.env
 ```
 
-**关键配置项说明：**
-
-| 配置项                           | 说明                     | 必须设置      |
-| ----------------------------- | ---------------------- | --------- |
-| QDRANT\_\_SERVICE\_\_API\_KEY | Qdrant 向量数据库 API 密钥    | ✅ 必须设置    |
-| OPENAI\_API\_KEY              | OpenAI API 密钥，用于 AI 功能 | ✅ 必须设置    |
-| OPENAI\_BASE\_URL             | OpenAI API 基础 URL      | 推荐设置      |
-| OPENAI\_MODEL                 | 使用的 AI 模型              | 推荐设置      |
-| EMBEDDING\_API\_KEY           | 嵌入模型 API 密钥            | 推荐设置      |
-| EMBEDDING\_MODEL              | 嵌入模型名称                 | 推荐设置      |
-| EMBEDDING\_VECTOR\_SIZE       | 嵌入向量大小                 | 必须与模型匹配   |
-| REDIS\_HOST                   | Redis 主机地址             | 容器部署时无需修改 |
-| REDIS\_PORT                   | Redis 端口               | 容器部署时无需修改 |
-
-**示例配置：**
+编辑 `../.env`，设置以下必须项：
 
 ```env
-# Qdrant 配置
-QDRANT__SERVICE__API_KEY=your_qdrant_api_key
-
-# OpenAI 配置
-OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+# OpenAI 配置（必须）
+OPENAI_API_KEY=sk-your-key
 OPENAI_BASE_URL=https://api.openai.com/v1
-OPENAI_MODEL=glm-4.7
+OPENAI_MODEL=gpt-4
 
-# 嵌入配置
-EMBEDDING_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-EMBEDDING_MODEL=text-embedding-3-small
-EMBEDDING_VECTOR_SIZE=1536
+# Redis（容器内使用默认值即可）
+REDIS_HOST=redis
+REDIS_PORT=6379
+
+# Qdrant（容器内使用默认值即可）
+QDRANT_URL=http://qdrant:6333
 ```
 
-### 3. 进入部署目录
+### 3. 构建并启动
 
 ```bash
-cd deploy
-```
-
-### 4. 拉取 Vector 镜像
-
-Vector 是日志收集服务，需要先拉取镜像：
-
-```bash
-docker compose pull vector
-```
-
-### 5. 启动核心服务
-
-启动除 Vector 以外的所有服务：
-
-```bash
+# 启动核心服务（Redis + Qdrant + API + Web UI）
 docker compose up -d --build
+
+# 启动包含 Vector 日志采集
+docker compose --profile vector up -d
 ```
 
-### 6. 验证核心服务启动状态
+### 4. 验证服务
 
 ```bash
+# 查看服务状态
 docker compose ps
+
+# 健康检查
+curl http://localhost:7000/health
 ```
 
-确保所有服务状态为 `Up`：
+预期输出：
 
-- auperator-redis
-- auperator-qdrant
-- auperator-api
-- auperator-web
+```json
+{"status":"healthy","redis":"connected","version":"1.0.0"}
+```
 
-### 7. 启动 Vector 服务
+---
 
-有两种方式启动 Vector 服务：
+## 服务架构
 
-#### 方式一：通过 Web UI 自动配置
+### 服务列表
 
-1. 访问 Web UI（默认地址：<http://localhost:3000）>
-2. 登录系统（如果需要）
-3. 使用 Agent 编写 Vector 配置
-4. 让 Agent 启动 Vector 容器
+```mermaid
+flowchart LR
+    subgraph External["外部访问"]
+        W[Web UI<br/>:3000]
+        A[API<br/>:7000]
+        Q[Qdrant<br/>:6333]
+    end
 
-#### 方式二：手动配置
+    subgraph Internal["容器网络"]
+        R[Redis<br/>:6379]
+        V[Vector]
+        AP[API Container]
+        WB[Web Container]
+    end
 
-1. 确保 `vector.yaml` 配置文件存在且格式正确
-2. 启动 Vector 容器：
-   ```bash
-   docker compose --profile vector up -d
-   ```
+    V -->|日志| AP
+    AP --> R
+    AP --> Q
+    WB --> A
+```
 
-## 服务架构详解
+### Docker Compose 服务
 
-### 核心服务
+| 服务 | 镜像 | 端口 | 说明 |
+|------|------|------|------|
+| `redis` | redis:7-alpine | 6379 | 消息队列 + 事件流 |
+| `qdrant` | qdrant/qdrant:v1.17.0 | 6333 | 向量数据库 |
+| `api` | 本地构建 | 7000 | FastAPI 后端服务 |
+| `web` | 本地构建 | 3000 | Next.js 前端 |
+| `vector` | timberio/vector:0.53.0-debian | - | 日志采集（可选） |
 
-| 服务名称   | 容器名称             | 端口   | 功能描述                 |
-| ------ | ---------------- | ---- | -------------------- |
-| Redis  | auperator-redis  | 6379 | 缓存和消息队列，用于日志处理和事件传递  |
-| Qdrant | auperator-qdrant | 6333 | 向量数据库，用于存储和检索向量数据    |
-| API    | auperator-api    | 7000 | 核心业务逻辑，处理 HTTP 请求和事件 |
-| Web    | auperator-web    | 3000 | 前端界面，提供用户交互          |
-| Vector | auperator-vector | -    | 日志收集服务，可选            |
+### 数据流
 
-### 数据流程
+```mermaid
+sequenceDiagram
+    participant DC as Docker Containers
+    participant V as Vector
+    participant API as API Service
+    participant R as Redis
+    participant Q as Qdrant
+    participant W as Web UI
 
-1. **日志收集**：Vector 收集容器日志并发送到 Redis
-2. **日志处理**：API 服务从 Redis 消费日志并处理
-3. **事件触发**：处理后的日志生成事件
-4. **AI 分析**：Agent Worker 分析事件并生成智能建议
-5. **数据存储**：向量数据存储在 Qdrant，其他数据存储在 SQLite
+    DC->>V: 容器日志
+    V->>API: /vector/ingest
+    API->>R: 事件流
+    API->>Q: 向量存储
+    W->>API: /chat/messages
+    API-->>W: SSE 事件流
+```
 
-## 访问地址
+---
 
-| 服务         | 地址                                | 说明        |
-| ---------- | --------------------------------- | --------- |
-| Web UI     | <http://localhost:3000>           | 前端管理界面    |
-| API 接口     | <http://localhost:7000>           | 后端 API 服务 |
-| API 健康检查   | <http://localhost:7000/health>    | 服务健康状态    |
-| Qdrant 控制台 | <http://localhost:6333/dashboard> | 向量数据库管理界面 |
+## 配置详解
 
-## 详细配置说明
+### docker-compose.yml
 
-### 环境变量文件
+```yaml
+services:
+  api:
+    build: ..
+    ports:
+      - "7000:7000"
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    volumes:
+      - ../:/app
+      - /tmp:/tmp  # Daytona 沙箱临时目录
+    depends_on:
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
 
-`../.env` 文件包含所有必要的配置参数，主要分为以下几个部分：
+  web:
+    build: ..
+    ports:
+      - "3000:3000"
 
-1. **API 配置**：API 服务的基本设置
-2. **OpenAI 配置**：AI 模型和 API 密钥
-3. **嵌入配置**：向量嵌入模型设置
-4. **Redis 配置**：Redis 连接参数
-5. **Qdrant 配置**：向量数据库设置
-6. **其他服务配置**：如 Telegram、Daytona 等
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
 
-### Docker Compose 配置
+  qdrant:
+    image: qdrant/qdrant:v1.17.0
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
 
-`docker-compose.yml` 文件定义了所有服务的部署配置：
+volumes:
+  redis_data:
+  qdrant_data:
+```
 
-- **网络配置**：使用 `auperator-network` 桥接网络
-- **卷配置**：持久化存储 Redis 和 Qdrant 数据
-- **依赖关系**：定义服务启动顺序和健康检查
-- **资源限制**：可根据服务器配置调整
+### 环境变量
+
+#### API 服务
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `API_HOST` | 0.0.0.0 | 监听地址 |
+| `API_PORT` | 7000 | 监听端口 |
+| `API_RELOAD` | false | 代码热重载 |
+| `API_WORKERS` | 1 | 工作进程数 |
+
+#### Redis
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `REDIS_HOST` | redis | Redis 主机 |
+| `REDIS_PORT` | 6379 | Redis 端口 |
+| `REDIS_PASSWORD` | - | Redis 密码 |
+| `REDIS_DB` | 0 | 数据库编号 |
+| `REDIS_KEY_PREFIX` | auperator | 键前缀 |
+
+#### Qdrant
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `QDRANT_URL` | http://qdrant:6333 | Qdrant 地址 |
+| `QDRANT_API_KEY` | - | API 密钥 |
+| `QDRANT_COLLECTION` | auperator_memories | Collection 名称 |
+
+#### OpenAI
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `OPENAI_API_KEY` | - | API 密钥（必须） |
+| `OPENAI_BASE_URL` | https://api.openai.com/v1 | API 地址 |
+| `OPENAI_MODEL` | gpt-4 | 模型名称 |
+
+---
 
 ## 服务管理
 
-### 启动服务
-
-- **启动核心服务**：
-  ```bash
-  docker compose up -d --build
-  ```
-- **启动包含 Vector 的所有服务**：
-  ```bash
-  docker compose --profile vector up -d
-  ```
-- **仅启动特定服务**：
-  ```bash
-  docker compose up -d redis qdrant
-  ```
-
-### 停止服务
-
-- **停止所有服务**：
-  ```bash
-  docker compose down
-  ```
-- **停止特定服务**：
-  ```bash
-  docker compose stop api web
-  ```
-
-### 查看服务状态
+### 启动
 
 ```bash
-docker compose ps
+# 启动所有服务
+docker compose up -d
+
+# 启动核心服务（不含 Vector）
+docker compose up -d redis qdrant api web
+
+# 启动包含 Vector
+docker compose --profile vector up -d
+
+# 仅启动特定服务
+docker compose up -d redis
 ```
 
-### 查看服务日志
+### 停止
 
-- **查看所有服务日志**：
-  ```bash
-  docker compose logs
-  ```
-- **查看特定服务日志**：
-  ```bash
-  docker compose logs -f api
-  ```
-- **查看最新日志**：
-  ```bash
-  docker compose logs -f --tail=100 api
-  ```
+```bash
+# 停止所有服务
+docker compose down
 
-## 日志管理
+# 停止并删除数据卷（慎用！）
+docker compose down -v
 
-### Vector 配置
+# 停止特定服务
+docker compose stop api
+```
 
-Vector 服务使用 `../vector.yaml` 配置文件，主要功能：
+### 重启
 
-- 收集 Docker 容器日志
-- 解析和处理日志格式
-- 将日志发送到 Redis 消息队列
+```bash
+# 重启所有服务
+docker compose restart
 
-### 日志处理流程
+# 重启特定服务
+docker compose restart api web
+```
 
-1. Vector 收集容器日志
-2. 日志被发送到 Redis List
-3. API 服务的 `VectorRedisConsumer` 消费日志
-4. 日志经过处理后生成事件
-5. 事件被发送到事件中心
-6. Agent Worker 处理事件并生成智能建议
+### 日志
 
-## 常见问题排查
+```bash
+# 查看所有日志
+docker compose logs -f
 
-### 服务启动失败
+# 查看特定服务日志
+docker compose logs -f api
+docker compose logs -f web
+docker compose logs -f redis
 
-1. **检查 Docker 状态**：
-   ```bash
-   sudo systemctl status docker
-   ```
-2. **检查环境变量**：
-   ```bash
-   cat .env | grep -E "QDRANT__SERVICE__API_KEY|OPENAI_API_KEY"
-   ```
-3. **查看容器日志**：
-   ```bash
-   docker compose logs -f api
-   ```
+# 查看最近 100 行
+docker compose logs --tail=100 api
+```
 
-### Qdrant 连接问题
+### 进入容器
 
-- **检查 Qdrant 状态**：
-  ```bash
-  docker compose logs -f qdrant
-  ```
-- **验证 Qdrant API 密钥**：
-  确保 `QDRANT__SERVICE__API_KEY` 在 `.env` 文件中正确设置
-- **检查网络连接**：
-  ```bash
-  docker exec -it auperator-api curl http://qdrant:6333/health
-  ```
+```bash
+# 进入 API 容器
+docker exec -it auperator-api /bin/bash
 
-### API 服务问题
+# 进入 Redis 容器
+docker exec -it auperator-redis redis-cli
 
-- **检查依赖服务**：
-  ```bash
-  docker compose ps redis qdrant
-  ```
-- **检查 OpenAI API 配置**：
-  确保 `OPENAI_API_KEY` 和 `OPENAI_BASE_URL` 正确设置
-- **查看 API 服务日志**：
-  ```bash
-  docker compose logs -f api
-  ```
+# 进入 Web 容器
+docker exec -it auperator-web /bin/sh
+```
 
-### Vector 服务问题
+### 重新构建
 
-- **检查 vector.yaml 配置**：
-  ```bash
-  cat ../vector.yaml
-  ```
-- **检查 Docker 权限**：
-  确保容器有访问 `/var/run/docker.sock` 的权限
-- **查看 Vector 日志**：
-  ```bash
-  docker compose logs -f vector
-  ```
+```bash
+# 重新构建并启动
+docker compose up -d --build
+
+# 重新构建但不启动
+docker compose build --no-cache
+```
+
+---
+
+## Nginx 配置
+
+### 生产部署建议
+
+将 Nginx 作为反向代理：
+
+```nginx
+# /etc/nginx/conf.d/auperator.conf
+
+upstream auperator_api {
+    server 127.0.0.1:7000;
+}
+
+upstream auperator_web {
+    server 127.0.0.1:3000;
+}
+
+server {
+    listen 80;
+    server_name your-domain.com;
+
+    # Web UI
+    location / {
+        proxy_pass http://auperator_web;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_cache_bypass $http_upgrade;
+    }
+
+    # API
+    location /api/ {
+        proxy_pass http://auperator_api/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+```
+
+### HTTPS 配置
+
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name your-domain.com;
+
+    ssl_certificate /path/to/cert.pem;
+    ssl_certificate_key /path/to/key.pem;
+
+    # ... 其他配置同上 ...
+}
+```
+
+---
+
+## 数据持久化
+
+### 数据卷
+
+| 卷名 | 路径 | 内容 |
+|------|------|------|
+| `redis_data` | /data | Redis 数据 |
+| `qdrant_data` | /qdrant/storage | Qdrant 向量数据 |
+
+### 备份 Redis
+
+```bash
+# 进入 Redis 容器
+docker exec -it auperator-redis redis-cli
+
+# 或直接执行
+docker exec auperator-redis redis-cli BGSAVE
+docker cp auperator-redis:/data/dump.rdb ./redis_backup.rdb
+```
+
+### 备份 Qdrant
+
+```bash
+# Qdrant 数据位于持久卷
+docker run --rm -v auperator_qdrant_data:/data -v $(pwd):/backup alpine tar czf /backup/qdrant_backup.tar.gz /data
+```
+
+---
+
+## 故障排查
+
+### 服务无法启动
+
+```bash
+# 1. 检查 Docker 状态
+sudo systemctl status docker
+
+# 2. 查看详细日志
+docker compose logs -f
+
+# 3. 检查端口占用
+sudo netstat -tlnp | grep -E '3000|6379|6333|7000'
+```
+
+### API 连接 Redis 失败
+
+```bash
+# 1. 检查 Redis 是否启动
+docker compose ps redis
+
+# 2. 检查 Redis 日志
+docker compose logs redis
+
+# 3. 测试 Redis 连接
+docker exec -it auperator-api nc -zv redis 6379
+
+# 4. 从容器内测试
+docker exec -it auperator-api curl http://redis:6379
+```
+
+### API 连接 Qdrant 失败
+
+```bash
+# 1. 检查 Qdrant 是否启动
+docker compose ps qdrant
+
+# 2. 检查 Qdrant 健康
+curl http://localhost:6333/health
+
+# 3. 从容器内测试
+docker exec -it auperator-api curl http://qdrant:6333/health
+```
+
+### Web UI 无法访问
+
+```bash
+# 1. 检查 Web 容器状态
+docker compose ps web
+
+# 2. 查看 Web 日志
+docker compose logs web
+
+# 3. 检查 Nginx 配置（如果使用）
+sudo nginx -t
+```
+
+### Vector 日志采集异常
+
+```bash
+# 1. 检查 Docker Socket 权限
+ls -la /var/run/docker.sock
+
+# 2. 检查 Vector 日志
+docker compose logs vector
+
+# 3. 验证 vector.yaml 配置
+docker exec -it auperator-vector vector config
+```
+
+### OpenAI API 调用失败
+
+```bash
+# 1. 检查 API Key
+grep OPENAI_API_KEY ../.env
+
+# 2. 测试 API 连接
+curl -H "Authorization: Bearer $OPENAI_API_KEY" \
+     https://api.openai.com/v1/models
+```
+
+---
 
 ## 性能优化
 
-### 服务器配置
+### 资源限制
 
-- **CPU**：至少 2 核，推荐 4 核以上
-- **内存**：至少 4GB，推荐 8GB 以上
-- **磁盘**：SSD 存储，至少 20GB 空间
+在 `docker-compose.yml` 中调整：
 
-### 服务配置优化
+```yaml
+services:
+  api:
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
 
-1. **API 服务**：
-   - 根据 CPU 核心数调整 `API_WORKERS` 参数
-   - 生产环境设置 `API_RELOAD=false`
-2. **Redis**：
-   - 调整内存限制：在 `docker-compose.yml` 中添加 `command: redis-server --maxmemory 1gb --maxmemory-policy allkeys-lru`
-3. **Qdrant**：
-   - 为 Qdrant 分配足够的内存：在 `docker-compose.yml` 中添加 `mem_limit: 2g`
-4. **Vector**：
-   - 根据日志量调整缓冲区大小
+  redis:
+    command: redis-server --maxmemory 1gb --maxmemory-policy allkeys-lru
 
-## 安全建议
+  qdrant:
+    mem_limit: 2g
+```
 
-### 生产环境配置
+### API 服务多进程
 
-1. **HTTPS**：
-   - 使用反向代理（如 Nginx）配置 HTTPS
-   - 配置 SSL 证书
-2. **网络安全**：
-   - 限制容器网络访问
-   - 使用 Docker 网络隔离
-   - 配置防火墙规则
-3. **密钥管理**：
-   - 使用环境变量管理敏感信息
-   - 定期更新 API 密钥
-   - 避免在代码中硬编码密钥
-4. **访问控制**：
-   - 为 Web UI 添加认证
-   - 限制 API 访问范围
-   - 使用 API 密钥保护接口
+```yaml
+api:
+  environment:
+    - API_WORKERS=4
+```
+
+### 日志轮转
+
+```yaml
+api:
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "10m"
+      max-file: "3"
+```
+
+---
+
+## 安全配置
+
+### 生产环境必做
+
+1. **使用环境变量管理密钥**
+   ```bash
+   # 不要将 .env 提交到版本控制
+   echo ".env" >> .gitignore
+   ```
+
+2. **限制 Docker Socket 访问**
+   ```yaml
+   vector:
+     devices:
+       - /dev/fuse:/dev/fuse
+     cap_add:
+       - SYS_ADMIN
+   ```
+
+3. **配置防火墙**
+   ```bash
+   # 仅允许必要端口
+   sudo ufw allow 80/tcp
+   sudo ufw allow 443/tcp
+   sudo ufw deny 7000/tcp  # API 不直接暴露
+   ```
+
+4. **启用 Redis 认证**（可选）
+   ```yaml
+   redis:
+     command: redis-server --requirepass your-password
+     environment:
+       - REDIS_PASSWORD=your-password
+   ```
+
+### HTTPS
+
+使用 Let's Encrypt：
+
+```bash
+# 安装 certbot
+sudo apt install certbot python3-certbot-nginx
+
+# 获取证书
+sudo certbot --nginx -d your-domain.com
+```
+
+---
+
+## 备份恢复
+
+### 自动备份脚本
+
+```bash
+#!/bin/bash
+# backup.sh
+
+BACKUP_DIR="./backups"
+DATE=$(date +%Y%m%d_%H%M%S)
+
+mkdir -p $BACKUP_DIR
+
+# 备份 Redis
+docker exec auperator-redis redis-cli BGSAVE
+sleep 5
+docker cp auperator-redis:/data/dump.rdb $BACKUP_DIR/redis_$DATE.rdb
+
+# 备份 Qdrant
+docker run --rm -v auperator_qdrant_data:/data -v $(pwd)/$BACKUP_DIR:/backup \
+    alpine tar czf /backup/qdrant_$DATE.tar.gz /data
+
+# 备份环境变量
+cp ../.env $BACKUP_DIR/env_$DATE
+
+echo "Backup completed: $DATE"
+```
+
+### 恢复
+
+```bash
+# 恢复 Redis
+docker cp redis_backup.rdb auperator-redis:/data/dump.rdb
+docker exec auperator-redis redis-cli DEBUG RELOAD
+
+# 恢复 Qdrant
+docker compose down
+docker run --rm -v auperator_qdrant_data:/data -v $(pwd):/backup \
+    alpine tar xzf qdrant_backup.tar.gz -C /
+docker compose up -d
+```
+
+---
 
 ## 版本更新
 
-### 代码更新
+### 更新步骤
 
-1. **拉取最新代码**：
-   ```bash
-   git pull
-   ```
-2. **更新依赖**：
-   ```bash
-   cd src/web && npm install
-   ```
-3. **重新构建并启动服务**：
-   ```bash
-   cd ../../deploy
-   docker compose up -d --build
-   ```
+```bash
+# 1. 拉取最新代码
+cd ..
+git pull origin main
 
-### 数据迁移
+# 2. 重新构建
+cd deploy
+docker compose down
+docker compose build --no-cache
+docker compose up -d
 
-- **SQLite 数据库**：数据会自动迁移
-- **Qdrant 数据**：向量数据会保留在持久卷中
-- **Redis 数据**：缓存数据会保留在持久卷中
+# 3. 检查服务
+docker compose ps
+curl http://localhost:7000/health
+```
 
-## 监控与维护
+### Docker Compose Profile
 
-### 健康检查
+| Profile | 包含服务 | 用途 |
+|---------|----------|------|
+| 默认 | redis, qdrant, api, web | 核心服务 |
+| vector | + vector | 启用日志采集 |
+| all | 所有服务 | 完全部署 |
 
-- **API 健康检查**：<http://localhost:7000/health>
-- **服务状态监控**：
-  ```bash
-  docker compose ps
-  ```
+```bash
+# 使用不同 profile
+docker compose --profile vector up -d
+docker compose --profile all up -d
+```
 
-### 日志监控
+---
 
-- **查看系统日志**：
-  ```bash
-  docker compose logs -f
-  ```
-- **设置日志轮转**：在 `docker-compose.yml` 中配置日志驱动
+## 相关链接
 
-### 定期维护
-
-1. **备份数据**：
-   - 备份 SQLite 数据库
-   - 备份 Qdrant 数据卷
-2. **清理资源**：
-   ```bash
-   docker system prune -f
-   ```
-3. **更新 Docker 镜像**：
-   ```bash
-   docker compose pull
-   docker compose up -d --build
-   ```
-
-## 开发环境配置
-
-### 本地开发
-
-1. **安装依赖**：
-   ```bash
-   # 后端依赖
-   pip install -e .
-
-   # 前端依赖
-   cd src/web && npm install
-   ```
-2. **启动开发服务**：
-   ```bash
-   # 启动后端服务
-   python -m auperator.server
-
-   # 启动前端服务
-   cd src/web && npm run dev
-   ```
-
-### 调试模式
-
-- **API 调试**：设置 `API_RELOAD=true` 和 `LOG_LEVEL=DEBUG`
-- **前端调试**：使用 `npm run dev` 启动开发服务器
-
+- [项目文档](../docs/) - 详细开发文档
+- [API 参考](../docs/backend/api-reference.md) - API 端点说明
+- [前端文档](../docs/frontend/) - Web UI 开发

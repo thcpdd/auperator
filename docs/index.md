@@ -1,70 +1,58 @@
-# Auperator 文档索引
+# Auperator 文档
 
-## 快速开始
+> 智能运维 Agent 系统文档
 
-- [README](../README.md) - 项目概述和快速开始
-- [.env.example](../.env.example) - 环境变量配置示例
+## 文档导航
 
-## 核心文档
+### 快速入门
 
-- [CLAUDE.md](../CLAUDE.md) - Claude Code 开发指南
-- [vector.yaml](../vector.yaml) - Vector 配置文件
+- [项目概述](../README.md) - 项目简介和核心功能
+- [后端快速开始](backend/getting-started.md) - 后端环境配置和启动
+- [前端快速开始](frontend/getting-started.md) - 前端开发环境
 
-## 架构
+### 后端文档
 
-Auperator 使用 **Vector.dev** 进行日志采集和处理：
+- [架构设计](backend/architecture.md) - 后端系统架构详解
+- [CLI 命令](backend/cli.md) - 命令行接口完整参考
+- [API 参考](backend/api-reference.md) - REST API 端点详解
+- [事件系统](backend/events.md) - Redis Streams 事件驱动架构
+- [DeepAgents](backend/deepagents.md) - 多 Agent 协作架构
+- [服务详解](backend/services/) - Drain3、记忆、Telegram 等服务
 
-```
-Log Source → Vector → Redis List → Consumer → Agent
-```
+### 前端文档
 
-### 核心组件
+- [架构设计](frontend/architecture.md) - Next.js Web UI 架构
+- [组件文档](frontend/components.md) - React 组件库
+- [页面路由](frontend/pages.md) - 页面和路由说明
+- [API 客户端](frontend/api-client.md) - 前端 API 调用层
 
-1. **Vector** - 日志采集、多行聚合、错误过滤
-2. **Redis** - 消息队列（List 类型）
-3. **Auperator Consumer** - 日志消费和格式转换
-4. **Agent** - 智能分析和自动修复
+### 部署运维
 
-## 使用指南
+- [Docker 部署](../deploy/README.md) - Docker Compose 部署指南
+- [配置参考](../.env.example) - 环境变量配置
 
-### CLI 命令
+## 技术栈
 
-```bash
-# 消费日志
-auperator-collector consume -v
+### 后端
 
-# 查看 List 信息
-auperator-collector list-info
-```
+| 技术 | 用途 |
+|------|------|
+| Python 3.11+ | 主语言 |
+| FastAPI | API 框架 |
+| Redis | 消息队列 + 事件流 |
+| Drain3 | 日志模板提取 |
+| LangGraph | Agent 编排 |
+| Daytona | 代码沙箱 |
 
-### 配置文件
+### 前端
 
-- `.env` - 环境变量配置
-- `vector.yaml` - Vector 日志处理配置
-
-## 开发指南
-
-### 扩展组件
-
-- **自定义适配器**：继承 `BaseLogAdapter`
-- **自定义处理器**：继承 `BaseLogHandler`
-
-### 项目结构
-
-```
-src/auperator/
-├── cli.py                    # 主命令行接口
-├── config.py                 # 配置管理
-└── collector/
-    ├── cli.py                # 采集器 CLI
-    ├── models.py             # 数据模型
-    ├── adapters/             # 日志适配器
-    ├── handlers/             # 日志处理器
-    ├── sources/              # 日志源（保留用于扩展）
-    └── vector_consumer.py    # Vector Redis 消费者
-```
-
----
+| 技术 | 用途 |
+|------|------|
+| Next.js 16 | React 框架 |
+| TypeScript | 类型安全 |
+| shadcn/ui | UI 组件库 |
+| Tailwind CSS 4 | 样式方案 |
+| SSE | 实时通信 |
 
 ## 项目链接
 

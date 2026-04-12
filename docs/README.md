@@ -1,53 +1,65 @@
 # Auperator 文档
 
-欢迎使用 Auperator - 智能运维 Agent。
+智能运维 Agent 系统文档中心。
 
-## 文档导航
-
-### 核心文档
-
-- [README](../README.md) - 项目概述和快速开始
-- [CLAUDE.md](../CLAUDE.md) - Claude Code 开发指南
-
-### 配置文件
-
-- [.env.example](../.env.example) - 环境变量配置示例
-- [vector.yaml](../vector.yaml) - Vector 日志处理配置
-
-## 项目概述
-
-Auperator 使用 **Vector.dev** 进行日志采集和处理，通过 Redis List 进行消息传递。
-
-### 架构
+## 文档结构
 
 ```
-Log Source → Vector → Redis List → Consumer → Agent
+docs/
+├── index.md              # 文档首页（本文档）
+│
+├── backend/              # 后端文档
+│   ├── getting-started.md  # 快速开始
+│   ├── architecture.md     # 架构设计
+│   ├── api-reference.md    # API 参考
+│   ├── cli.md              # CLI 命令
+│   ├── deepagents.md       # DeepAgents 架构
+│   ├── events.md           # 事件系统
+│   └── services/          # 服务详解
+│       ├── README.md
+│       ├── drain3.md      # Drain3 日志处理
+│       ├── memory.md       # Qdrant 记忆系统
+│       └── telegram.md     # Telegram 通知
+│
+├── frontend/             # 前端文档
+│   ├── getting-started.md  # 快速开始
+│   ├── architecture.md     # 架构设计
+│   ├── components.md       # 组件文档
+│   ├── pages.md            # 页面路由
+│   └── api-client.md       # API 客户端
+│
+└── README.md             # 文档索引
 ```
 
-### 核心组件
+## 快速导航
 
-1. **Vector** - 日志采集、多行聚合、错误过滤
-2. **Redis** - 消息队列（List 类型）
-3. **Auperator Consumer** - 日志消费和格式转换
-4. **Agent** - 智能分析和自动修复
+### 后端
 
-## 快速开始
+| 模块 | 文档 | 说明 |
+|------|------|------|
+| 安装配置 | [快速开始](backend/getting-started.md) | 环境搭建和启动 |
+| 系统架构 | [架构设计](backend/architecture.md) | 组件和数据流 |
+| API 接口 | [API 参考](backend/api-reference.md) | 所有 REST 端点 |
+| 命令行 | [CLI 参考](backend/cli.md) | 所有 CLI 命令 |
+| Agent 核心 | [DeepAgents](backend/deepagents.md) | 多 Agent 协作 |
+| 通信机制 | [事件系统](backend/events.md) | Redis Streams |
+| 日志去重 | [Drain3](backend/services/drain3.md) | 日志模板提取 |
+| 向量记忆 | [记忆服务](backend/services/memory.md) | Qdrant 集成 |
+| 移动通知 | [Telegram](backend/services/telegram.md) | Bot 推送 |
 
-```bash
-# 1. 安装依赖
-pip install -e .
+### 前端
 
-# 2. 配置环境变量
-cp .env.example .env
+| 模块 | 文档 | 说明 |
+|------|------|------|
+| 安装配置 | [快速开始](frontend/getting-started.md) | 环境搭建 |
+| 技术栈 | [架构设计](frontend/architecture.md) | 组件和架构 |
+| 组件库 | [组件文档](frontend/components.md) | 所有 UI 组件 |
+| 页面路由 | [页面路由](frontend/pages.md) | 页面说明 |
+| API 调用 | [API 客户端](frontend/api-client.md) | 前端 API 层 |
 
-# 3. 启动 Vector
-vector --config vector.yaml
+## 相关文档
 
-# 4. 消费日志
-auperator-collector consume -v
-```
-
-## 项目链接
-
-- [GitHub 仓库](https://github.com/thcpdd/auperator)
-- [问题反馈](https://github.com/thcpdd/auperator/issues)
+- [项目 README](../README.md) - 项目概述
+- [CLAUDE.md](../CLAUDE.md) - 开发指南
+- [.env.example](../.env.example) - 配置示例
+- [deploy/README.md](../deploy/README.md) - Docker 部署

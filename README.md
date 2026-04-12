@@ -68,32 +68,115 @@ Auperator 致力于解决传统运维系统中的痛点：被动响应、依赖�
 - **SSE 推送**：服务端事件流实时推送
 - **异步处理**：Agent Worker 后台任务处理
 
+### 6. Telegram 通知（新增）
+
+集成 Telegram Bot，实时推送 Agent 处理结果：
+
+- **WebHook 模式**：自动接收 Telegram 更新
+- **消息推送**：Agent 事件实时推送到指定聊天
+- **简单配置**：仅需 Bot Token 即可启用
+
 ## 架构
 
 ### 系统架构图
 
-```
-┌──────────────┐    ┌──────────────┐    ┌─────────────┐    ┌─────────────┐    ┌──────────────┐
-│  Docker      │───▶│    Vector    │───▶│  HTTP API   │───▶│   Drain3    │───▶│  Redis List  │
-│  Containers  │    │  (Collection)│    │  /ingest)   │    │  (Dedup)    │    │  (logs:main)│
-└──────────────┘    └──────────────┘    └─────────────┘    └─────────────┘    └──────────────┘
-                                                                 │
-                                                                 ▼
-                                                        ┌──────────────────┐
-                                                        │   Agent Handler  │
-                                                        │      Consumer    │
-                                                        └──────────────────┘
+```mermaid
+flowchart TB
+    subgraph Input["日志输入"]
+        DC[Docker Containers]
+        W[Web UI]
+    end
 
-┌──────────────┐    ┌──────────────┐    ┌─────────────┐    ┌─────────────┐    ┌──────────────┐
-│   Web UI     │───▶│  Chat API    │───▶│    Event    │───▶│   Redis      │───▶│   Agent       │
-│  (Next.js)   │    │  /chat/*     │    │   Center    │    │   Streams    │    │   Worker      │
-└──────────────┘    └──────────────┘    └─────────────┘    └─────────────┘    └──────────────┘
-                           │                                                        │
-                           │                                                        ▼
-                           └─────────────────────────────────────────────▶  ┌─────────────┐
-                                                                        │  SQLite DB  │
-                                                                        │(Conversations)│
-                                                                        └─────────────┘
+    subgraph Collection["日志采集"]
+        V[Vector]
+        V -->|"多行聚合 + 过滤"| API[HTTP API<br/>/vector/ingest]
+    end
+
+    subgraph Processing["日志处理"]
+        D3[Drain3<br/>模板提取去重]
+        API --> D3
+        D3 -->|"新模板"| RL[Redis List<br/>logs:main]
+    end
+
+    subgraph Core["事件中枢"]
+        EC[Event Center]
+        RS[Redis Streams]
+        EC <--> RS
+    end
+
+    subgraph Engine["Agent 引擎"]
+        AW[Agent Worker]
+        Q[Qdrant<br/>记忆存储]
+        DT[Daytona<br/>Sandbox]
+        GH[GitHub<br/>PR]
+        TG[Telegram Bot]
+        DB[(SQLite<br/>Conversations)]
+    end
+
+    RL --> AW
+    W -->|"USER 事件"| EC
+    EC -->|"分发"| AW
+    AW -->|"AGENT 事件"| EC
+    AW --> Q
+    AW --> DT
+    AW --> TG
+    DT --> GH
+    AW -.->|"实时推送"| W
+    EC -.->|"推送"| W
+    AW --> DB
+
+    style EC fill:#ff9800,stroke:#e65100,stroke-width:4px,color:#fff
+    style RS fill:#ff9800,stroke:#e65100,stroke-width:4px,color:#fff
+```
+
+### Agent 内部架构（Multi-Agent）
+
+```mermaid
+flowchart TB
+    MA[Main Agent<br/>Orchestrator]
+
+    MA --> LA[log_analysis]
+    MA --> FX[fix]
+    MA --> VL[validation]
+    MA --> PR[pr]
+
+    LA -->|"查询历史"| Q[Qdrant<br/>Memories]
+    LA -->|"分析报告"| FX
+    FX -->|"修复方案"| VL
+    VL -->|"测试结果"| FX
+    VL -->|"待合并"| PR
+
+    subgraph Execution["执行层"]
+        DT[Daytona Sandbox<br/>Safe Execution]
+    end
+
+    FX --> DT
+    PR --> DT
+    DT --> GH[GitHub<br/>Create PR]
+```
+
+### 数据流
+
+```mermaid
+sequenceDiagram
+    participant DC as Docker Container
+    participant V as Vector
+    participant API as HTTP API
+    participant D3 as Drain3
+    participant RL as Redis List
+    participant AW as Agent Worker
+    participant DT as Daytona
+    participant GH as GitHub
+
+    DC->>V: 日志输出
+    V->>API: 结构化日志
+    API->>D3: 提取模板
+    D3->>RL: 新模板
+    RL->>AW: 消费日志
+    AW->>DT: 执行修复
+    DT->>GH: 创建 PR
+
+    Note over AW: 多 Agent 协作<br/>log_analysis → fix → validation → pr
 ```
 
 ### CLI 模式数据流
@@ -140,7 +223,7 @@ uv pip install -e .
 # 安装前端依赖
 cd src/web
 npm install
-# 或使用 pnpm
+# 或使用 pnpm（推荐）
 pnpm install
 ```
 
@@ -206,6 +289,14 @@ SQLITE_DB_FILE=auperator.db.sqlite3
 # 消费者配置
 CONSUMER_BATCH_SIZE=1
 CONSUMER_BLOCK_TIMEOUT=5
+
+# Telegram 配置
+TELEGRAM_BOT_TOKEN=           # Telegram Bot Token
+TELEGRAM_WEBHOOK_URL=         # WebHook 回调地址
+TELEGRAM_WEBHOOK_SECRET=      # WebHook 密钥
+
+# Vector 配置
+VECTOR_IMAGE=                # Vector 镜像名称
 ```
 
 ### 启动服务
@@ -241,6 +332,44 @@ cd src/web && npm run dev
 
 访问 <http://localhost:3000> 使用 Web UI
 
+#### Docker 部署
+
+使用 Docker Compose 一键启动所有服务：
+
+```bash
+cd deploy
+
+# 启动所有服务（Redis + Qdrant + API + Web UI）
+docker-compose up -d
+
+# 包含 Vector 日志采集
+docker-compose --profile vector up -d
+
+# 查看服务状态
+docker-compose ps
+
+# 查看日志
+docker-compose logs -f api
+docker-compose logs -f web
+
+# 停止服务
+docker-compose down
+```
+
+**Docker Compose 服务**：
+
+| 服务   | 端口  | 描述              |
+| ------ | ----- | ----------------- |
+| redis  | 6379  | Redis 7 Alpine    |
+| qdrant | 6333  | Qdrant 向量数据库 |
+| api    | 7000  | Auperator API     |
+| web    | 3000  | Next.js Web UI    |
+| vector | -     | 日志采集（可选）  |
+
+**Nginx 反向代理**：deploy/nginx.conf 提供生产级 Nginx 配置。
+
+详细部署说明请参考 [deploy/README.md](deploy/README.md)。
+
 #### 仅启动 CLI 模式
 
 ```bash
@@ -270,6 +399,9 @@ auperator terminal-consume -v
 
 # 查看 Redis List 信息
 auperator list-info
+
+# 初始化项目记忆（分析目标项目并生成 AUPERATOR.md）
+auperator init
 ```
 
 ### 命令选项
@@ -304,6 +436,12 @@ auperator list-info [OPTIONS]
 选项：
   -r, --redis TEXT     Redis 连接 URL
   -l, --list TEXT      List 名称
+
+# init 命令选项
+auperator init [OPTIONS]
+
+选项：
+  --project-path TEXT   目标项目路径（默认：当前目录）
 ```
 
 ## Web UI 功能
@@ -351,6 +489,9 @@ GET /chat/conversations/{conversation_id}/messages
 # Web UI 事件流（SSE）
 POST /events/web-ui
 Body: {"thread_id": "optional-conversation-id"}
+
+# Docker 日志流（SSE）
+POST /events/docker-logs
 ```
 
 #### 内存管理
@@ -373,11 +514,27 @@ auperator/
 ├── README.md               # 项目文档
 ├── CLAUDE.md               # Claude Code 开发指南
 ├── pyproject.toml          # Python 项目配置
+├── uv.lock                 # uv 锁文件
+├── .python-version         # Python 版本
 ├── .env                    # 环境变量配置
 ├── .env.example            # 环境变量配置示例
-├── vector.yaml             # Vector 配置
+├── vector.yaml             # Vector 日志采集配置
+├── vector.example.yaml     # Vector 配置示例
 ├── drain3.json             # Drain3 状态文件（自动生成）
 ├── auperator.db.sqlite3    # SQLite 数据库（自动生成）
+├── test.py                 # 测试文件
+├── test1.py                # 测试文件
+│
+├── deploy/                 # Docker 部署配置
+│   ├── Dockerfile.api      # API 服务 Dockerfile
+│   ├── Dockerfile.web       # Web UI Dockerfile
+│   ├── docker-compose.yml  # Docker 编排配置
+│   ├── nginx.conf          # Nginx 反向代理配置
+│   └── README.md           # 部署文档
+│
+├── docs/                   # 文档目录
+│   ├── README.md
+│   └── index.md
 │
 ├── src/
 │   └── auperator/
@@ -402,15 +559,37 @@ auperator/
 │       │   │   ├── protocol.py  # 后端协议定义
 │       │   │   ├── local_shell.py # 本地 Shell 后端
 │       │   │   ├── sandbox.py   # Daytona 沙箱后端
+│       │   │   ├── daytona_sandbox.py # Daytona SDK 后端
+│       │   │   ├── composite.py # 组合后端
 │       │   │   ├── state.py     # 内存状态后端
 │       │   │   ├── filesystem.py # 文件系统后端
-│       │   │   └── store.py     # 持久化存储后端
+│       │   │   ├── store.py     # 持久化存储后端
+│       │   │   └── utils.py     # 后端工具函数
 │       │   ├── middleware/      # Agent 中间件
+│       │   │   ├── filesystem.py # 文件操作中间件
+│       │   │   ├── memory.py     # 记忆中间件
+│       │   │   ├── skills.py     # 技能加载中间件
+│       │   │   ├── subagents.py  # 子 Agent 中间件
+│       │   │   ├── summarization.py # 输出摘要中间件
+│       │   │   ├── patch_tool_calls.py # 工具调用修补
+│       │   │   ├── event.py      # 事件中间件
+│       │   │   └── _utils.py     # 中间件工具函数
 │       │   ├── tools/           # Agent 工具
-│       │   │   ├── docker_tools.py # Docker 操作
-│       │   │   └── pull_request.py # GitHub PR 创建
+│       │   │   ├── docker_tools.py  # Docker 操作
+│       │   │   ├── pull_request.py  # GitHub PR 创建
+│       │   │   ├── memory_tools.py # 记忆存储/检索
+│       │   │   ├── state_tools.py  # 状态管理工具
+│       │   │   ├── vector_tools.py # Vector/日志工具
+│       │   │   └── registry.py      # 工具注册表
 │       │   ├── skills/          # 技能文件
+│       │   │   └── vector/      # Daytona 技能
 │       │   └── prompts/         # 系统提示词
+│       │       ├── system.py     # 主 Agent 系统提示词
+│       │       ├── log_analysis.py
+│       │       ├── fix.py
+│       │       ├── validation.py
+│       │       ├── pr.py
+│       │       └── initialize.py # 项目初始化提示词
 │       │
 │       ├── schemas/             # 数据模型
 │       │   ├── vector.py        # Vector 日志模型
@@ -418,11 +597,14 @@ auperator/
 │       │   ├── log.py           # 日志数据模型
 │       │   ├── event.py         # 事件模型
 │       │   ├── conversation.py  # 对话模型
-│       │   └── memory.py        # 记忆模型
+│       │   ├── memory.py        # 记忆模型
+│       │   └── docker_log.py    # Docker 日志模型
 │       │
 │       ├── services/            # 业务服务
 │       │   ├── drain3_service.py # Drain3 服务
-│       │   └── daytona_service.py # Daytona 沙箱服务
+│       │   ├── daytona_service.py # Daytona 沙箱服务
+│       │   ├── memory_service.py  # Qdrant 记忆服务
+│       │   └── telegram_service.py # Telegram 机器人服务
 │       │
 │       ├── events/              # 事件系统
 │       │   ├── event_center.py  # 事件发布和消费
@@ -433,30 +615,62 @@ auperator/
 │       │   ├── models.py        # SQLAlchemy 模型
 │       │   └── base.py          # 基础数据库类
 │       │
-│       └── routes/              # FastAPI 路由
-│           ├── vector.py        # Vector 日志接收
-│           ├── daytona.py       # 沙箱管理
-│           ├── chat.py          # 聊天 API
-│           ├── events.py        # SSE 事件流
-│           └── memory.py        # 记忆管理
+│       ├── routes/              # FastAPI 路由
+│       │   ├── vector.py        # Vector 日志接收
+│       │   ├── daytona.py       # 沙箱管理
+│       │   ├── chat.py          # 聊天 API
+│       │   ├── events.py        # SSE 事件流
+│       │   └── memory.py        # 记忆管理
+│       │
+│       └── utils/               # 工具函数
+│           ├── embeddings.py    # 嵌入模型
+│           ├── logging.py       # 日志配置
+│           └── checkpointer.py  # 状态持久化
 │
-└── web/                        # Next.js Web UI
-    ├── app/                    # Next.js app 目录
-    │   ├── page.tsx            # 主页面
-    │   ├── layout.tsx          # 根布局
-    │   ├── globals.css         # 全局样式
-    │   └── api/                # API 路由
-    ├── components/             # React 组件
-    │   ├── ChatView.tsx        # 聊天视图
-    │   ├── ConversationList.tsx # 对话列表
-    │   └── ...
-    ├── lib/                    # 工具库
+└── src/web/                     # Next.js Web UI
+    ├── app/                     # Next.js app 目录
+    │   ├── page.tsx             # 首页
+    │   ├── layout.tsx           # 根布局
+    │   ├── globals.css          # 全局样式
+    │   ├── chat/page.tsx        # 聊天页面
+    │   ├── config/page.tsx      # 配置页面
+    │   ├── logs/page.tsx        # 日志页面
+    │   ├── status/page.tsx      # 状态页面
+    │   └── api/events/          # SSE API 路由
+    │       ├── docker-logs/route.ts  # Docker 日志流
+    │       └── web-ui/route.ts   # Web UI 事件流
+    ├── components/
+    │   ├── layout/              # 布局组件
+    │   │   ├── Header.tsx       # 头部
+    │   │   ├── Sidebar.tsx      # 侧边栏（对话列表）
+    │   │   └── MainLayout.tsx   # 主布局
+    │   ├── ui/                  # UI 基础组件
+    │   │   ├── markdown.tsx     # Markdown 渲染
+    │   │   ├── scroll-area.tsx  # 滚动区域
+    │   │   └── ...
+    │   └── views/               # 视图组件
+    │       ├── ChatView.tsx     # 聊天视图
+    │       ├── ConfigView.tsx   # 配置视图
+    │       └── StatusView.tsx  # 状态视图
+    ├── hooks/                   # React Hooks
+    │   ├── useChat.ts          # 聊天状态管理
+    │   ├── useConversations.ts  # 对话管理
+    │   └── useSSE.ts           # SSE 事件流
+    ├── lib/                     # 工具库
     │   ├── api.ts              # API 客户端
-    │   └── events.ts           # 事件处理
-    └── package.json            # 前端依赖
+    │   ├── types.ts            # TypeScript 类型
+    │   └── utils.ts            # 工具函数
+    ├── next.config.ts          # Next.js 配置
+    ├── postcss.config.mjs      # PostCSS 配置
+    ├── eslint.config.mjs       # ESLint 配置
+    ├── components.json          # shadcn/ui 配置
+    ├── package.json             # 前端依赖
+    └── README.md               # Web UI 文档
 ```
 
 ## Vector 配置
+
+> 配置文件：`vector.yaml`（实际配置）、`vector.example.yaml`（配置示例）
 
 ### vector.yaml
 
@@ -542,6 +756,29 @@ sqlite3 auperator.db.sqlite3 "SELECT id, thread_id, title, created_at FROM conve
 
 # 查看 Agent checkpoints
 sqlite3 auperator.db.sqlite3 "SELECT * FROM checkpoints;"
+```
+
+### Docker 调试
+
+```bash
+# 查看所有容器状态
+docker ps
+
+# 查看 API 服务日志
+docker logs -f auperator-api
+
+# 查看 Web UI 日志
+docker logs -f auperator-web
+
+# 进入 API 容器
+docker exec -it auperator-api /bin/bash
+
+# 查看 Vector 日志
+docker logs -f auperator-vector
+
+# 重启指定服务
+docker-compose restart api
+docker-compose restart web
 ```
 
 ### 启用 Langfuse 追踪
@@ -684,6 +921,9 @@ POST /chat/messages
 
 - [CLAUDE.md](CLAUDE.md) - Claude Code 开发指南
 - [.env.example](.env.example) - 环境变量配置示例
+- [deploy/README.md](deploy/README.md) - Docker 部署指南
+- [docs/](docs/) - 项目文档目录
+- [src/web/README.md](src/web/README.md) - Web UI 开发文档
 
 ## 联系方式
 
