@@ -34,7 +34,12 @@ ENV PYTHONUNBUFFERED=1 \
 
 RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources && \
     apt-get update && apt-get install -y --no-install-recommends \
-    curl && rm -rf /var/lib/apt/lists/*
+    curl && \
+    # 下载并安装 Docker CLI 二进制文件，注意在 Compose 文件中挂载 /var/run/docker.sock
+    curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-27.3.1.tgz | \
+    tar zxvf - --strip-components=1 -C /usr/local/bin/ docker/docker && \
+    # ------------------------------------------
+    rm -rf /var/lib/apt/lists/*
 
 # 从 builder 复制整个 /app 目录（包含 .venv 和源码）
 COPY --from=builder /app /app

@@ -60,6 +60,8 @@ services:
       - ../src:/app/src
       - ../.env:/app/.env:ro
       - ../pyproject.toml:/app/pyproject.toml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /tmp:/tmp:rw
     env_file:
       - ../.env
     depends_on:
