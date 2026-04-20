@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from collections.abc import Callable
 from typing import cast
@@ -9,6 +10,7 @@ from uuid import uuid4
 
 import daytona
 from daytona import FileDownloadRequest, FileUpload, SessionExecuteRequest
+from daytona.common.errors import DaytonaError
 
 from .protocol import (
     BackendProtocol,
@@ -17,6 +19,9 @@ from .protocol import (
     FileUploadResponse,
 )
 from .sandbox import BaseSandbox
+from auperator.services.daytona_service import get_or_create_sync_daytona_sandbox
+
+logger = logging.getLogger(__name__)
 
 SyncPollingInterval = float | Callable[[float], float]
 PollingStrategy = Callable[[float], float]
@@ -27,6 +32,10 @@ class DaytonaSandbox(BaseSandbox):
 
     This implementation inherits all file operation methods from BaseSandbox
     and only implements the execute() method using Daytona's API.
+
+    If the underlying sandbox is closed or becomes unavailable (e.g., due to
+    an auto-delete timeout), the backend will automatically recreate the sandbox
+    and retry the operation once.
     """
 
     def __init__(
@@ -60,6 +69,19 @@ class DaytonaSandbox(BaseSandbox):
 
         self._sync_polling_interval = polling_strategy
 
+    def _recreate_sandbox(self) -> None:
+        """Recreate the sandbox when it has been closed or is unreachable.
+
+        Called automatically when a sandbox operation fails. Uses
+        get_or_create_sync_daytona_sandbox to find an alive sandbox or
+        create a new one.
+        """
+        old_id = getattr(self._sandbox, "id", "unknown")
+        logger.warning(f"Sandbox {old_id} is dead, recreating...")
+
+        self._sandbox = get_or_create_sync_daytona_sandbox()
+        logger.info(f"Sandbox recreated: {self._sandbox.id}")
+
     @property
     def id(self) -> str:
         """Return the Daytona sandbox id."""
@@ -91,7 +113,25 @@ class DaytonaSandbox(BaseSandbox):
         *,
         timeout: int,
     ) -> ExecuteResponse:
-        """Execute a command through a session and poll logs until completion."""
+        """Execute a command through a session and poll logs until completion.
+
+        If the sandbox is dead (e.g., auto-deleted), recreates the sandbox
+        and retries once.
+        """
+        try:
+            return self._do_execute_via_session_logs(command, timeout=timeout)
+        except DaytonaError:
+            # Sandbox is dead — recreate and retry once
+            self._recreate_sandbox()
+            return self._do_execute_via_session_logs(command, timeout=timeout)
+
+    def _do_execute_via_session_logs(
+        self,
+        command: str,
+        *,
+        timeout: int,
+    ) -> ExecuteResponse:
+        """Internal implementation of execute via session logs."""
         session_id = str(uuid4())
         self._sandbox.process.create_session(session_id)
         try:
