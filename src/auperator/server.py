@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from auperator.config import settings
 from auperator.routes import (
@@ -135,6 +136,9 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+# Prometheus 指标暴露
+Instrumentator().instrument(app).expose(app, endpoint="/prometheus/metrics")
 
 # 注册路由
 app.include_router(daytona_router)
